@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.HF_TOKEN}`
+          Authorization: `Bearer ${process.env.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}`
         },
         body: formData
       }
