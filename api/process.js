@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     formData.append("data", buffer, { filename: "input.wav" });
 
     const response = await fetch(
-      "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/run/predict",
+      "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/run/process_song",
       {
         method: "POST",
         headers: {
