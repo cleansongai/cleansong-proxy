@@ -6,7 +6,6 @@
 <audio id="outAudio" controls></audio>
 
 <script>
-const FREECONVERT_API_KEY = 'YOUR_FREECONVERT_API_KEY'; // <-- Replace with your FreeConvert API key
 const btn = document.getElementById("process");
 const fileInput = document.getElementById("file");
 const lyricsDiv = document.getElementById("lyrics");
@@ -14,88 +13,34 @@ const outAudio = document.getElementById("outAudio");
 const timerDiv = document.getElementById("timer");
 const statusDiv = document.getElementById("status");
 
-async function compressAudioWithFreeConvert(file) {
-  // 1. Create the job
-  statusDiv.textContent = "Creating compression job...";
-  const inputBody = {
-    "tasks": {
-      "import": { "operation": "import/upload" },
-      "compress": {
-        "operation": "compress",
-        "input": "import",
-        "input_format": file.type.split('/')[1] || "mp3",
-        "output_format": "mp3",
-        "options": {
-          "compression_method": "percentage",
-          "target_size_percentage": 40
+async function compressAudioViaBackend(file) {
+  statusDiv.textContent = "Compressing audio file (via backend)...";
+  // Convert file to base64
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result;
+      try {
+        const res = await fetch("/api/compress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file: base64, fileType: file.type })
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          reject(new Error(json.error || "Compression failed"));
+          return;
         }
-      },
-      "export-url": {
-        "operation": "export/url",
-        "input": ["compress"]
+        // json.file is a base64 data URL
+        // Convert to Blob
+        const compressedBlob = await (await fetch(json.file)).blob();
+        resolve(compressedBlob);
+      } catch (err) {
+        reject(err);
       }
-    }
-  };
-  const headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'Authorization': `Bearer ${FREECONVERT_API_KEY}`
-  };
-
-  const jobRes = await fetch('https://api.freeconvert.com/v1/process/jobs', {
-    method: 'POST',
-    body: JSON.stringify(inputBody),
-    headers
+    };
+    reader.readAsDataURL(file);
   });
-  const job = await jobRes.json();
-  if (!job.tasks || !job.tasks.import || !job.tasks.import.result || !job.tasks.import.result.form) {
-    throw new Error('Failed to create FreeConvert job');
-  }
-  const uploadUrl = job.tasks.import.result.form.url;
-  const uploadParams = job.tasks.import.result.form.parameters;
-
-  // 2. Upload the file
-  statusDiv.textContent = "Uploading file to FreeConvert...";
-  const formData = new FormData();
-  for (const key in uploadParams) {
-    formData.append(key, uploadParams[key]);
-  }
-  formData.append('file', file);
-
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'POST',
-    body: formData
-  });
-  if (!uploadRes.ok) throw new Error('Failed to upload file to FreeConvert');
-
-  // 3. Poll for job completion
-  statusDiv.textContent = "Compressing audio (this may take a moment)...";
-  let jobId = job.id;
-  let status = '';
-  let exportUrl = '';
-  while (status !== 'completed') {
-    await new Promise(r => setTimeout(r, 3000)); // wait 3 seconds
-    const pollRes = await fetch(`https://api.freeconvert.com/v1/process/jobs/${jobId}`, { headers });
-    const pollJob = await pollRes.json();
-    status = pollJob.status;
-    if (status === 'completed') {
-      // Find the export-url task and get the file URL
-      const exportTask = Object.values(pollJob.tasks).find(t => t.operation === 'export/url');
-      if (exportTask && exportTask.result && exportTask.result.files && exportTask.result.files[0]) {
-        exportUrl = exportTask.result.files[0].url;
-      }
-    } else if (status === 'failed') {
-      throw new Error('Compression failed');
-    }
-  }
-  if (!exportUrl) throw new Error('No export URL found');
-
-  // 4. Download the compressed file as a Blob
-  statusDiv.textContent = "Downloading compressed audio...";
-  const compressedRes = await fetch(exportUrl);
-  const compressedBlob = await compressedRes.blob();
-
-  return compressedBlob;
 }
 
 btn.onclick = async () => {
@@ -115,8 +60,8 @@ btn.onclick = async () => {
   }, 1000);
 
   try {
-    // Compress the audio file first
-    const compressedBlob = await compressAudioWithFreeConvert(file);
+    // Compress the audio file via backend
+    const compressedBlob = await compressAudioViaBackend(file);
     statusDiv.textContent = "Calling Hugging Face API...";
 
     // Convert compressedBlob to base64
