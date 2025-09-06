@@ -46,10 +46,6 @@ async function compressAudioViaBackend(file) {
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
-  if (file.size > 2 * 1024 * 1024) {
-    alert("File is too large! Please select a file smaller than 2MB.");
-    return;
-  }
 
   let timer = 0;
   timerDiv.textContent = "Processing time: 0s";
