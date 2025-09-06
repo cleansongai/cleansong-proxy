@@ -1,4 +1,4 @@
-import * as gradio from "@gradio/client";
+import { client as gradioClient } from "@gradio/client";
 import { Readable } from "stream";
 
 export default async function handler(req, res) {
@@ -50,10 +50,10 @@ export default async function handler(req, res) {
     }
 
     // Connect to Hugging Face Space
-    let client;
+    let app;
     try {
       console.log("Connecting to Hugging Face Space...");
-      client = await gradio.connect("CleanSong/Lyric-Cleaner", {
+      app = await gradioClient("CleanSong/Lyric-Cleaner", {
         hf_token: process.env.HF_TOKEN // only needed if Space is private
       });
       console.log("Connected to Hugging Face Space");
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
     let result;
     try {
       console.log("Calling /process_song with buffer...");
-      result = await client.predict("/process_song", {
+      result = await app.predict("/process_song", {
         audio_path: buffer // pass buffer directly
       });
       console.log("Prediction result:", result);
