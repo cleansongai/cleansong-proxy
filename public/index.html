@@ -1,5 +1,7 @@
 <input type="file" id="file" accept="audio/*">
-<button id="process">PROCESS - MUST BE LESS THAN 4 MB SIZE</button>
+<button id="process">Process</button>
+<div id="timer"></div>
+<div id="status"></div>
 <div id="lyrics"></div>
 <audio id="outAudio" controls></audio>
 
@@ -8,32 +10,54 @@ const btn = document.getElementById("process");
 const fileInput = document.getElementById("file");
 const lyricsDiv = document.getElementById("lyrics");
 const outAudio = document.getElementById("outAudio");
+const timerDiv = document.getElementById("timer");
+const statusDiv = document.getElementById("status");
 
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
 
+  let timer = 0;
+  timerDiv.textContent = "Processing time: 0s";
+  statusDiv.textContent = "";
+  let interval = setInterval(() => {
+    timer++;
+    timerDiv.textContent = `Processing time: ${timer}s`;
+  }, 1000);
+
   const reader = new FileReader();
   reader.onloadend = async () => {
     const base64 = reader.result;
-
-    const res = await fetch("/api/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file: base64 })
-    });
-
-    const json = await res.json();
-    console.log(json);
-
-    lyricsDiv.innerHTML = `
-      <h3>Original Lyrics</h3><p>${json.original}</p>
-      <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
-    `;
-
-    if (json.audio?.url) {
-      outAudio.src = json.audio.url;
-      outAudio.load();
+    try {
+      statusDiv.textContent = "Calling Hugging Face API...";
+      const res = await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: base64 })
+      });
+      const json = await res.json();
+      clearInterval(interval);
+      timerDiv.textContent = `Total processing time: ${timer}s`;
+      statusDiv.textContent = "Processing complete.";
+      console.log(json);
+      if (!res.ok) {
+        lyricsDiv.innerHTML = `<span style="color:red">Error: ${json.error || "Unknown error"}</span>`;
+        return;
+      }
+      lyricsDiv.innerHTML = `
+        <h3>Original Lyrics</h3><p>${json.original}</p>
+        <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
+      `;
+      if (json.audio?.url) {
+        outAudio.src = json.audio.url;
+        outAudio.load();
+      }
+    } catch (err) {
+      clearInterval(interval);
+      timerDiv.textContent = "";
+      statusDiv.textContent = "";
+      lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
+      console.error(err);
     }
   };
   reader.readAsDataURL(file);
