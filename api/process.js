@@ -1,4 +1,4 @@
-import gradio from "@gradio/client";
+import * as gradio from "@gradio/client";
 import { Readable } from "stream";
 
 export default async function handler(req, res) {
