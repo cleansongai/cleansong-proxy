@@ -1,4 +1,4 @@
-import { client as gradioClient } from "@gradio/client";
+import fetch from "node-fetch";
 import { Readable } from "stream";
 
 export default async function handler(req, res) {
@@ -41,50 +41,60 @@ export default async function handler(req, res) {
 
     // Decode base64 from frontend
     let buffer;
+    let base64Audio;
     try {
-      buffer = Buffer.from(file.split(",")[1], "base64");
+      base64Audio = file.split(",")[1];
+      buffer = Buffer.from(base64Audio, "base64");
       console.log("Buffer created. Length:", buffer.length);
     } catch (e) {
       console.log("Error decoding base64 file:", e);
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Connect to Hugging Face Space
-    let app;
+    // Call Hugging Face Space REST API
+    let apiResponse;
     try {
-      console.log("Connecting to Hugging Face Space...");
-      app = await gradioClient("CleanSong/Lyric-Cleaner", {
-        hf_token: process.env.HF_TOKEN // only needed if Space is private
+      console.log("Calling Hugging Face Space REST API...");
+      const hfRes = await fetch("https://hf.space/embed/CleanSong/Lyric-Cleaner/api/predict/", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          data: [
+            `data:audio/wav;base64,${base64Audio}`
+          ]
+        })
       });
-      console.log("Connected to Hugging Face Space");
+      apiResponse = await hfRes.json();
+      console.log("Hugging Face API response:", apiResponse);
+      if (!hfRes.ok) {
+        return res.status(500).json({ error: apiResponse.error || "Hugging Face API error" });
+      }
     } catch (e) {
-      console.log("Error connecting to Hugging Face Space:", e.message, e.stack);
-      return res.status(500).json({ error: `Failed to connect to Hugging Face Space: ${e.message}` });
+      console.log("Error calling Hugging Face Space REST API:", e.message, e.stack);
+      return res.status(500).json({ error: `Failed to call Hugging Face Space API: ${e.message}` });
     }
 
-    // Call /process_song
-    let result;
+    // Parse and return the outputs
     try {
-      console.log("Calling /process_song with buffer...");
-      result = await app.predict("/process_song", {
-        audio_path: buffer // pass buffer directly
+      const result = apiResponse;
+      // The output format depends on the Space, but typically:
+      // result.data = [original, cleaned, audio]
+      if (!result || !result.data) {
+        console.log("Result or result.data is undefined", result);
+        return res.status(500).json({ error: "No data returned from Hugging Face Space" });
+      }
+      return res.status(200).json({
+        original: result.data[0],
+        cleaned: result.data[1],
+        audio: result.data[2]
       });
-      console.log("Prediction result:", result);
-    } catch (e) {
-      console.log("Error during prediction:", e);
-      return res.status(500).json({ error: "Prediction failed" });
+    } catch (err) {
+      console.error("General error:", err.stack || err);
+      return res.status(500).json({ error: err.message || "Internal Server Error" });
     }
-
-    // Return the 3 outputs
-    if (!result || !result.data) {
-      console.log("Result or result.data is undefined", result);
-      return res.status(500).json({ error: "No data returned from prediction" });
-    }
-    return res.status(200).json({
-      original: result.data[0],
-      cleaned: result.data[1],
-      audio: result.data[2]
-    });
   } catch (err) {
     console.error("General error:", err.stack || err);
     return res.status(500).json({ error: err.message || "Internal Server Error" });
