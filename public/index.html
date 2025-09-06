@@ -6,6 +6,7 @@
 <audio id="outAudio" controls></audio>
 
 <script>
+const FREECONVERT_API_KEY = 'YOUR_FREECONVERT_API_KEY'; // <-- Replace with your FreeConvert API key
 const btn = document.getElementById("process");
 const fileInput = document.getElementById("file");
 const lyricsDiv = document.getElementById("lyrics");
@@ -13,10 +14,94 @@ const outAudio = document.getElementById("outAudio");
 const timerDiv = document.getElementById("timer");
 const statusDiv = document.getElementById("status");
 
+async function compressAudioWithFreeConvert(file) {
+  // 1. Create the job
+  statusDiv.textContent = "Creating compression job...";
+  const inputBody = {
+    "tasks": {
+      "import": { "operation": "import/upload" },
+      "compress": {
+        "operation": "compress",
+        "input": "import",
+        "input_format": file.type.split('/')[1] || "mp3",
+        "output_format": "mp3",
+        "options": {
+          "compression_method": "percentage",
+          "target_size_percentage": 40
+        }
+      },
+      "export-url": {
+        "operation": "export/url",
+        "input": ["compress"]
+      }
+    }
+  };
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${FREECONVERT_API_KEY}`
+  };
+
+  const jobRes = await fetch('https://api.freeconvert.com/v1/process/jobs', {
+    method: 'POST',
+    body: JSON.stringify(inputBody),
+    headers
+  });
+  const job = await jobRes.json();
+  if (!job.tasks || !job.tasks.import || !job.tasks.import.result || !job.tasks.import.result.form) {
+    throw new Error('Failed to create FreeConvert job');
+  }
+  const uploadUrl = job.tasks.import.result.form.url;
+  const uploadParams = job.tasks.import.result.form.parameters;
+
+  // 2. Upload the file
+  statusDiv.textContent = "Uploading file to FreeConvert...";
+  const formData = new FormData();
+  for (const key in uploadParams) {
+    formData.append(key, uploadParams[key]);
+  }
+  formData.append('file', file);
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    body: formData
+  });
+  if (!uploadRes.ok) throw new Error('Failed to upload file to FreeConvert');
+
+  // 3. Poll for job completion
+  statusDiv.textContent = "Compressing audio (this may take a moment)...";
+  let jobId = job.id;
+  let status = '';
+  let exportUrl = '';
+  while (status !== 'completed') {
+    await new Promise(r => setTimeout(r, 3000)); // wait 3 seconds
+    const pollRes = await fetch(`https://api.freeconvert.com/v1/process/jobs/${jobId}`, { headers });
+    const pollJob = await pollRes.json();
+    status = pollJob.status;
+    if (status === 'completed') {
+      // Find the export-url task and get the file URL
+      const exportTask = Object.values(pollJob.tasks).find(t => t.operation === 'export/url');
+      if (exportTask && exportTask.result && exportTask.result.files && exportTask.result.files[0]) {
+        exportUrl = exportTask.result.files[0].url;
+      }
+    } else if (status === 'failed') {
+      throw new Error('Compression failed');
+    }
+  }
+  if (!exportUrl) throw new Error('No export URL found');
+
+  // 4. Download the compressed file as a Blob
+  statusDiv.textContent = "Downloading compressed audio...";
+  const compressedRes = await fetch(exportUrl);
+  const compressedBlob = await compressedRes.blob();
+
+  return compressedBlob;
+}
+
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
-  if (file.size > 2 * 1024 * 1024) { // 2MB limit
+  if (file.size > 2 * 1024 * 1024) {
     alert("File is too large! Please select a file smaller than 2MB.");
     return;
   }
@@ -29,41 +114,53 @@ btn.onclick = async () => {
     timerDiv.textContent = `Processing time: ${timer}s`;
   }, 1000);
 
-  const reader = new FileReader();
-  reader.onloadend = async () => {
-    const base64 = reader.result;
-    try {
-      statusDiv.textContent = "Calling Hugging Face API...";
-      const res = await fetch("/api/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: base64 })
-      });
-      const json = await res.json();
-      clearInterval(interval);
-      timerDiv.textContent = `Total processing time: ${timer}s`;
-      statusDiv.textContent = "Processing complete.";
-      console.log(json);
-      if (!res.ok) {
-        lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
-        return;
+  try {
+    // Compress the audio file first
+    const compressedBlob = await compressAudioWithFreeConvert(file);
+    statusDiv.textContent = "Calling Hugging Face API...";
+
+    // Convert compressedBlob to base64
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result;
+      try {
+        const res = await fetch("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file: base64 })
+        });
+        const json = await res.json();
+        clearInterval(interval);
+        timerDiv.textContent = `Total processing time: ${timer}s`;
+        statusDiv.textContent = "Processing complete.";
+        console.log(json);
+        if (!res.ok) {
+          lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
+          return;
+        }
+        lyricsDiv.innerHTML = `
+          <h3>Original Lyrics</h3><p>${json.original}</p>
+          <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
+        `;
+        if (json.audio?.url) {
+          outAudio.src = json.audio.url;
+          outAudio.load();
+        }
+      } catch (err) {
+        clearInterval(interval);
+        timerDiv.textContent = "";
+        statusDiv.textContent = "";
+        lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
+        console.error(err);
       }
-      lyricsDiv.innerHTML = `
-        <h3>Original Lyrics</h3><p>${json.original}</p>
-        <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
-      `;
-      if (json.audio?.url) {
-        outAudio.src = json.audio.url;
-        outAudio.load();
-      }
-    } catch (err) {
-      clearInterval(interval);
-      timerDiv.textContent = "";
-      statusDiv.textContent = "";
-      lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
-      console.error(err);
-    }
-  };
-  reader.readAsDataURL(file);
+    };
+    reader.readAsDataURL(compressedBlob);
+  } catch (err) {
+    clearInterval(interval);
+    timerDiv.textContent = "";
+    statusDiv.textContent = "";
+    lyricsDiv.innerHTML = `<span style=\"color:red\">Compression error: ${err.message}</span>`;
+    console.error(err);
+  }
 };
 </script>
