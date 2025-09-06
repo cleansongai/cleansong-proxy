@@ -1,4 +1,4 @@
-import { Client } from "@gradio/client";
+import gradio from "@gradio/client";
 import { Readable } from "stream";
 
 export default async function handler(req, res) {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     // If it requires a Blob, you may need to use a polyfill or pass the buffer directly
 
     // Connect to Hugging Face Space
-    const client = await Client.connect("CleanSong/Lyric-Cleaner", {
+    const client = await gradio.connect("CleanSong/Lyric-Cleaner", {
       hf_token: process.env.HF_TOKEN // only needed if Space is private
     });
 
