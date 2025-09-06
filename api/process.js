@@ -58,8 +58,8 @@ export default async function handler(req, res) {
       });
       console.log("Connected to Hugging Face Space");
     } catch (e) {
-      console.log("Error connecting to Hugging Face Space:", e);
-      return res.status(500).json({ error: "Failed to connect to Hugging Face Space" });
+      console.log("Error connecting to Hugging Face Space:", e.message, e.stack);
+      return res.status(500).json({ error: `Failed to connect to Hugging Face Space: ${e.message}` });
     }
 
     // Call /process_song
