@@ -16,6 +16,10 @@ const statusDiv = document.getElementById("status");
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
+  if (file.size > 2 * 1024 * 1024) { // 2MB limit
+    alert("File is too large! Please select a file smaller than 2MB.");
+    return;
+  }
 
   let timer = 0;
   timerDiv.textContent = "Processing time: 0s";
@@ -41,7 +45,7 @@ btn.onclick = async () => {
       statusDiv.textContent = "Processing complete.";
       console.log(json);
       if (!res.ok) {
-        lyricsDiv.innerHTML = `<span style="color:red">Error: ${json.error || "Unknown error"}</span>`;
+        lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
         return;
       }
       lyricsDiv.innerHTML = `
