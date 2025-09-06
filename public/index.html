@@ -26,7 +26,15 @@ async function compressAudioViaBackend(file) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ file: base64, fileType: file.type })
         });
-        const json = await res.json();
+        let json;
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          json = await res.json();
+        } else {
+          const text = await res.text();
+          reject(new Error(`Compression failed: ${text}`));
+          return;
+        }
         if (!res.ok) {
           reject(new Error(json.error || "Compression failed"));
           return;

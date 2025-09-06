@@ -54,12 +54,23 @@ export default async function handler(req, res) {
     };
 
     // 1. Create job
-    const jobRes = await fetch('https://api.freeconvert.com/v1/process/jobs', {
-      method: 'POST',
-      body: JSON.stringify(inputBody),
-      headers
-    });
-    const job = await jobRes.json();
+    let jobRes, job;
+    try {
+      jobRes = await fetch('https://api.freeconvert.com/v1/process/jobs', {
+        method: 'POST',
+        body: JSON.stringify(inputBody),
+        headers
+      });
+      const contentType = jobRes.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        job = await jobRes.json();
+      } else {
+        const text = await jobRes.text();
+        return res.status(500).json({ error: 'Failed to create FreeConvert job', details: text });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed to create FreeConvert job', details: e.message });
+    }
     if (!job.tasks || !job.tasks.import || !job.tasks.import.result || !job.tasks.import.result.form) {
       return res.status(500).json({ error: 'Failed to create FreeConvert job', details: job });
     }
@@ -67,7 +78,6 @@ export default async function handler(req, res) {
     const uploadParams = job.tasks.import.result.form.parameters;
 
     // 2. Upload the file
-    // file is a base64 data URL, convert to Buffer
     const base64Data = file.split(',')[1];
     const buffer = Buffer.from(base64Data, 'base64');
     const formData = new FormData();
@@ -76,12 +86,18 @@ export default async function handler(req, res) {
     }
     formData.append('file', buffer, { filename: 'audio.' + inputFormat });
 
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'POST',
-      body: formData
-    });
+    let uploadRes;
+    try {
+      uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData
+      });
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed to upload file to FreeConvert', details: e.message });
+    }
     if (!uploadRes.ok) {
-      const errText = await uploadRes.text();
+      let errText = '';
+      try { errText = await uploadRes.text(); } catch (e) { errText = 'Unknown error'; }
       return res.status(500).json({ error: 'Failed to upload file to FreeConvert', details: errText });
     }
 
@@ -92,8 +108,19 @@ export default async function handler(req, res) {
     let pollCount = 0;
     while (status !== 'completed' && pollCount < 30) { // max ~90s
       await new Promise(r => setTimeout(r, 3000));
-      const pollRes = await fetch(`https://api.freeconvert.com/v1/process/jobs/${jobId}`, { headers });
-      const pollJob = await pollRes.json();
+      let pollRes, pollJob;
+      try {
+        pollRes = await fetch(`https://api.freeconvert.com/v1/process/jobs/${jobId}`, { headers });
+        const contentType = pollRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          pollJob = await pollRes.json();
+        } else {
+          const text = await pollRes.text();
+          return res.status(500).json({ error: 'Compression failed', details: text });
+        }
+      } catch (e) {
+        return res.status(500).json({ error: 'Compression failed', details: e.message });
+      }
       status = pollJob.status;
       if (status === 'completed') {
         const exportTask = Object.values(pollJob.tasks).find(t => t.operation === 'export/url');
@@ -108,13 +135,19 @@ export default async function handler(req, res) {
     if (!exportUrl) return res.status(500).json({ error: 'No export URL found' });
 
     // 4. Download the compressed file as a Buffer
-    const compressedRes = await fetch(exportUrl);
-    const compressedBuffer = Buffer.from(await compressedRes.arrayBuffer());
+    let compressedRes, compressedBuffer;
+    try {
+      compressedRes = await fetch(exportUrl);
+      compressedBuffer = Buffer.from(await compressedRes.arrayBuffer());
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed to download compressed file', details: e.message });
+    }
     // Convert to base64 data URL
     const base64Compressed = `data:audio/mp3;base64,${compressedBuffer.toString('base64')}`;
     return res.status(200).json({ file: base64Compressed });
   } catch (err) {
     console.error("/api/compress error:", err.stack || err);
+    // Always return JSON error
     return res.status(500).json({ error: err.message || "Internal Server Error" });
   }
 }
