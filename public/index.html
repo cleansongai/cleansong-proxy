@@ -6,7 +6,7 @@
   <title>CleanSong Audio Processor</title>
   <style>
     body {
-      background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+      background: none;
       min-height: 100vh;
       margin: 0;
       font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
@@ -15,9 +15,9 @@
       justify-content: center;
     }
     .container {
-      background: #fff;
+      background: none;
       border-radius: 18px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      box-shadow: none;
       padding: 2.5rem 2rem 2rem 2rem;
       max-width: 420px;
       width: 100%;
@@ -29,8 +29,9 @@
     h1 {
       margin: 0 0 0.5rem 0;
       font-size: 2rem;
-      color: #3730a3;
+      color: #00ffff;
       letter-spacing: 1px;
+      text-shadow: 0 0 8px #00ffff, 0 0 16px #00ffff;
     }
     .file-input {
       display: flex;
@@ -42,10 +43,21 @@
     input[type="file"] {
       padding: 0.5rem;
       border-radius: 8px;
-      border: 1px solid #c7d2fe;
-      background: #f1f5f9;
+      border: 1px solid #00ffff;
+      background: #000;
       width: 100%;
       font-size: 1rem;
+      color: #39FF14;
+      box-shadow: 0 0 8px #00ffff;
+    }
+    input[type="file"]::file-selector-button {
+      color: #00ffff;
+      background: #000;
+      border: 1px solid #00ffff;
+      border-radius: 6px;
+      padding: 0.3em 1em;
+      cursor: pointer;
+      text-shadow: 0 0 8px #00ffff;
     }
     button {
       background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
@@ -64,33 +76,37 @@
     }
     #timer, #status {
       font-size: 1rem;
-      color: #6366f1;
+      color: #39FF14;
       margin-top: 0.2rem;
       min-height: 1.2em;
       text-align: center;
+      text-shadow: 0 0 8px #39FF14;
     }
     #lyrics {
       margin-top: 1.2rem;
-      background: #f3f4f6;
+      background: #000;
       border-radius: 10px;
       padding: 1rem;
       width: 100%;
       box-sizing: border-box;
-      color: #22223b;
+      color: #00ffff;
       font-size: 1.05rem;
       min-height: 3em;
+      text-shadow: 0 0 8px #00ffff;
     }
     #lyrics h3 {
       margin: 0.5em 0 0.2em 0;
-      color: #3730a3;
+      color: #39FF14;
       font-size: 1.1em;
+      text-shadow: 0 0 8px #39FF14;
     }
     audio {
       margin-top: 1.2rem;
       width: 100%;
       border-radius: 8px;
-      background: #e0e7ff;
+      background: #000;
       outline: none;
+      box-shadow: 0 0 8px #00ffff;
     }
     @media (max-width: 500px) {
       .container {
@@ -156,7 +172,7 @@ btn.onclick = async () => {
       statusDiv.textContent = "Processing complete.";
       console.log(json);
       if (!res.ok) {
-        lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
+        lyricsDiv.innerHTML = `<span style=\"color:#39FF14\">Error: ${json.error || "Unknown error"}</span>`;
         return;
       }
       lyricsDiv.innerHTML = `
@@ -171,7 +187,7 @@ btn.onclick = async () => {
       clearInterval(interval);
       timerDiv.textContent = "";
       statusDiv.textContent = "";
-      lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
+      lyricsDiv.innerHTML = `<span style=\"color:#39FF14\">JS Error: ${err.message}</span>`;
       console.error(err);
     }
   };
