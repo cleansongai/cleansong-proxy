@@ -13,47 +13,13 @@ const outAudio = document.getElementById("outAudio");
 const timerDiv = document.getElementById("timer");
 const statusDiv = document.getElementById("status");
 
-async function compressAudioViaBackend(file) {
-  statusDiv.textContent = "Compressing audio file (via backend)...";
-  // Convert file to base64
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64 = reader.result;
-      try {
-        const res = await fetch("/api/compress", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: base64, fileType: file.type })
-        });
-        let json;
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          json = await res.json();
-        } else {
-          const text = await res.text();
-          reject(new Error(`Compression failed: ${text}`));
-          return;
-        }
-        if (!res.ok) {
-          reject(new Error(json.error || "Compression failed"));
-          return;
-        }
-        // json.file is a base64 data URL
-        // Convert to Blob
-        const compressedBlob = await (await fetch(json.file)).blob();
-        resolve(compressedBlob);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
+  if (file.size > 4 * 1024 * 1024) {
+    alert("File is too large! Please select a file smaller than 4MB.");
+    return;
+  }
 
   let timer = 0;
   timerDiv.textContent = "Processing time: 0s";
@@ -63,53 +29,41 @@ btn.onclick = async () => {
     timerDiv.textContent = `Processing time: ${timer}s`;
   }, 1000);
 
-  try {
-    // Compress the audio file via backend
-    const compressedBlob = await compressAudioViaBackend(file);
-    statusDiv.textContent = "Calling Hugging Face API...";
-
-    // Convert compressedBlob to base64
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64 = reader.result;
-      try {
-        const res = await fetch("/api/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: base64 })
-        });
-        const json = await res.json();
-        clearInterval(interval);
-        timerDiv.textContent = `Total processing time: ${timer}s`;
-        statusDiv.textContent = "Processing complete.";
-        console.log(json);
-        if (!res.ok) {
-          lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
-          return;
-        }
-        lyricsDiv.innerHTML = `
-          <h3>Original Lyrics</h3><p>${json.original}</p>
-          <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
-        `;
-        if (json.audio?.url) {
-          outAudio.src = json.audio.url;
-          outAudio.load();
-        }
-      } catch (err) {
-        clearInterval(interval);
-        timerDiv.textContent = "";
-        statusDiv.textContent = "";
-        lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
-        console.error(err);
+  const reader = new FileReader();
+  reader.onloadend = async () => {
+    const base64 = reader.result;
+    try {
+      statusDiv.textContent = "Calling Hugging Face API...";
+      const res = await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: base64 })
+      });
+      const json = await res.json();
+      clearInterval(interval);
+      timerDiv.textContent = `Total processing time: ${timer}s`;
+      statusDiv.textContent = "Processing complete.";
+      console.log(json);
+      if (!res.ok) {
+        lyricsDiv.innerHTML = `<span style=\"color:red\">Error: ${json.error || "Unknown error"}</span>`;
+        return;
       }
-    };
-    reader.readAsDataURL(compressedBlob);
-  } catch (err) {
-    clearInterval(interval);
-    timerDiv.textContent = "";
-    statusDiv.textContent = "";
-    lyricsDiv.innerHTML = `<span style=\"color:red\">Compression error: ${err.message}</span>`;
-    console.error(err);
-  }
+      lyricsDiv.innerHTML = `
+        <h3>Original Lyrics</h3><p>${json.original}</p>
+        <h3>Cleaned Lyrics</h3><p>${json.cleaned}</p>
+      `;
+      if (json.audio?.url) {
+        outAudio.src = json.audio.url;
+        outAudio.load();
+      }
+    } catch (err) {
+      clearInterval(interval);
+      timerDiv.textContent = "";
+      statusDiv.textContent = "";
+      lyricsDiv.innerHTML = `<span style=\"color:red\">JS Error: ${err.message}</span>`;
+      console.error(err);
+    }
+  };
+  reader.readAsDataURL(file);
 };
 </script>
