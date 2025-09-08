@@ -1,9 +1,120 @@
-<input type="file" id="file" accept="audio/*">
-<button id="process">Process</button>
-<div id="timer"></div>
-<div id="status"></div>
-<div id="lyrics"></div>
-<audio id="outAudio" controls></audio>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CleanSong Audio Processor</title>
+  <style>
+    body {
+      background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 2.5rem 2rem 2rem 2rem;
+      max-width: 420px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.2rem;
+    }
+    h1 {
+      margin: 0 0 0.5rem 0;
+      font-size: 2rem;
+      color: #3730a3;
+      letter-spacing: 1px;
+    }
+    .file-input {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+    }
+    input[type="file"] {
+      padding: 0.5rem;
+      border-radius: 8px;
+      border: 1px solid #c7d2fe;
+      background: #f1f5f9;
+      width: 100%;
+      font-size: 1rem;
+    }
+    button {
+      background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem 2.2rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+    }
+    button:hover {
+      background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+    }
+    #timer, #status {
+      font-size: 1rem;
+      color: #6366f1;
+      margin-top: 0.2rem;
+      min-height: 1.2em;
+      text-align: center;
+    }
+    #lyrics {
+      margin-top: 1.2rem;
+      background: #f3f4f6;
+      border-radius: 10px;
+      padding: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+      color: #22223b;
+      font-size: 1.05rem;
+      min-height: 3em;
+    }
+    #lyrics h3 {
+      margin: 0.5em 0 0.2em 0;
+      color: #3730a3;
+      font-size: 1.1em;
+    }
+    audio {
+      margin-top: 1.2rem;
+      width: 100%;
+      border-radius: 8px;
+      background: #e0e7ff;
+      outline: none;
+    }
+    @media (max-width: 500px) {
+      .container {
+        padding: 1.2rem 0.5rem 1.5rem 0.5rem;
+        max-width: 98vw;
+      }
+      h1 {
+        font-size: 1.3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CleanSong Audio Processor</h1>
+    <div class="file-input">
+      <input type="file" id="file" accept="audio/*">
+      <button id="process">Process</button>
+    </div>
+    <div id="timer"></div>
+    <div id="status"></div>
+    <div id="lyrics"></div>
+    <audio id="outAudio" controls></audio>
+  </div>
 
 <script>
 const btn = document.getElementById("process");
@@ -67,3 +178,5 @@ btn.onclick = async () => {
   reader.readAsDataURL(file);
 };
 </script>
+</body>
+</html>
