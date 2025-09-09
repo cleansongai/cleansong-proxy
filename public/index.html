@@ -140,6 +140,82 @@ const outAudio = document.getElementById("outAudio");
 const timerDiv = document.getElementById("timer");
 const statusDiv = document.getElementById("status");
 
+// Function to compress audio using Web Audio API
+async function compressAudio(file) {
+  return new Promise((resolve, reject) => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const fileReader = new FileReader();
+    
+    fileReader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target.result;
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Convert to mono and reduce sample rate
+        const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * 16000, 16000);
+        const source = offlineContext.createBufferSource();
+        source.buffer = audioBuffer;
+        
+        // Create a gain node to convert stereo to mono
+        const gainNode = offlineContext.createGain();
+        source.connect(gainNode);
+        gainNode.connect(offlineContext.destination);
+        
+        const compressedBuffer = await offlineContext.startRendering();
+        
+        // Convert back to WAV
+        const wavBuffer = audioBufferToWav(compressedBuffer);
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        
+        resolve(blob);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    
+    fileReader.readAsArrayBuffer(file);
+  });
+}
+
+// Function to convert AudioBuffer to WAV
+function audioBufferToWav(buffer) {
+  const length = buffer.length;
+  const arrayBuffer = new ArrayBuffer(44 + length * 2);
+  const view = new DataView(arrayBuffer);
+  
+  // WAV header
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 16000, true);
+  view.setUint32(28, 32000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, length * 2, true);
+  
+  // Convert float samples to 16-bit PCM
+  const channelData = buffer.getChannelData(0);
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    const sample = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+    offset += 2;
+  }
+  
+  return arrayBuffer;
+}
+
 btn.onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("Choose a file!");
@@ -155,6 +231,19 @@ btn.onclick = async () => {
     timer++;
     timerDiv.textContent = `Processing time: ${timer}s`;
   }, 1000);
+
+  // Compress audio if it's large
+  let processedFile = file;
+  if (file.size > 2 * 1024 * 1024) { // 2MB
+    statusDiv.textContent = "Compressing audio...";
+    try {
+      processedFile = await compressAudio(file);
+      console.log(`Compressed from ${(file.size / (1024 * 1024)).toFixed(2)}MB to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`);
+    } catch (err) {
+      console.error("Compression failed:", err);
+      statusDiv.textContent = "Compression failed, using original file...";
+    }
+  }
 
   const reader = new FileReader();
   reader.onloadend = async () => {
@@ -208,7 +297,7 @@ btn.onclick = async () => {
       console.error(err);
     }
   };
-  reader.readAsDataURL(file);
+  reader.readAsDataURL(processedFile);
 };
 </script>
 </body>
