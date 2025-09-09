@@ -151,8 +151,9 @@ async function compressAudio(file) {
         const arrayBuffer = e.target.result;
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        // Convert to mono and reduce sample rate
-        const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * 16000, 16000);
+        // Convert to mono and reduce sample rate more aggressively
+        const targetSampleRate = 8000; // Even lower sample rate
+        const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * targetSampleRate, targetSampleRate);
         const source = offlineContext.createBufferSource();
         source.buffer = audioBuffer;
         
@@ -197,8 +198,8 @@ function audioBufferToWav(buffer) {
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
-  view.setUint32(24, 16000, true);
-  view.setUint32(28, 32000, true);
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 16000, true);
   view.setUint16(32, 2, true);
   view.setUint16(34, 16, true);
   writeString(36, 'data');
@@ -236,18 +237,36 @@ btn.onclick = async () => {
   let processedFile = file;
   console.log(`Original file size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
   
-  if (file.size > 2 * 1024 * 1024) { // 2MB
+  // Compress if larger than 1MB (more aggressive threshold)
+  if (file.size > 1 * 1024 * 1024) { // 1MB
     statusDiv.textContent = "Compressing audio...";
     try {
       processedFile = await compressAudio(file);
       console.log(`Compressed from ${(file.size / (1024 * 1024)).toFixed(2)}MB to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`);
       statusDiv.textContent = `Compressed to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`;
+      
+      // If still too large, try even more aggressive compression
+      if (processedFile.size > 1.5 * 1024 * 1024) {
+        statusDiv.textContent = "Further compressing audio...";
+        processedFile = await compressAudio(processedFile);
+        console.log(`Further compressed to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`);
+        statusDiv.textContent = `Final size: ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`;
+      }
     } catch (err) {
       console.error("Compression failed:", err);
       statusDiv.textContent = "Compression failed, using original file...";
     }
   } else {
     console.log("File is small enough, no compression needed");
+  }
+
+  // Check if file is still too large after compression
+  if (processedFile.size > 2 * 1024 * 1024) {
+    clearInterval(interval);
+    timerDiv.textContent = "";
+    statusDiv.textContent = "";
+    lyricsDiv.innerHTML = `<span style="color:#ff6b6b">Error: File is still too large (${(processedFile.size / (1024 * 1024)).toFixed(2)}MB) after compression. Please try a shorter audio file.</span>`;
+    return;
   }
 
   const reader = new FileReader();
