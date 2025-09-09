@@ -7,8 +7,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@gradio/client": "^0.15.0", 
-    "node-fetch": "^3.3.2",
-    "express": "^4.18.2"
+    "@gradio/client": "^0.15.1",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2"
   }
 }

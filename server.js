@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Client } from '@gradio/client';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,130 +63,50 @@ app.post('/api/process', async (req, res) => {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call Hugging Face Space REST API
+    // Call CleanSong using Gradio client
     let apiResponse;
     try {
-      console.log("Calling Hugging Face Space REST API...");
-      console.log("Token present:", !!process.env.HF_TOKEN);
-      console.log("Token length:", process.env.HF_TOKEN ? process.env.HF_TOKEN.length : 0);
+      console.log("Connecting to CleanSong/Lyric-Cleaner using Gradio client...");
       
-      // Test if the model exists first
-      console.log("Testing if CleanSong model exists...");
+      // Connect to the Gradio space
+      const client = await Client.connect("CleanSong/Lyric-Cleaner");
+      console.log("Connected to Gradio space successfully");
       
-      // First, let's try a simple test call to see what we get
-      const testResponse = await fetch("https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          inputs: "test"
-        })
+      // Convert base64 to blob
+      const audioBlob = new Blob([buffer], { type: 'audio/wav' });
+      console.log("Created audio blob, size:", audioBlob.size);
+      
+      // Call the process_song endpoint
+      console.log("Calling /process_song endpoint...");
+      const result = await client.predict("/process_song", {
+        audio_path: audioBlob
       });
       
-      console.log("Test response status:", testResponse.status);
-      const testText = await testResponse.text();
-      console.log("Test response content (first 500 chars):", testText.substring(0, 500));
+      console.log("Gradio API response:", result);
+      apiResponse = result;
       
-      // If the model doesn't exist, try a different approach
-      if (testResponse.status === 404 || testText.includes("Model") || testText.includes("not found") || testText.includes("<")) {
-        console.log("CleanSong model not found, trying alternative approach...");
-        
-        // Try using a different model that might work for audio processing
-        try {
-          console.log("Trying alternative model...");
-          const altResponse = await fetch("https://api-inference.huggingface.co/models/facebook/wav2vec2-base-960h", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              inputs: `data:audio/wav;base64,${base64Audio}`
-            })
-          });
-          
-          if (altResponse.ok) {
-            const altResult = await altResponse.json();
-            console.log("Alternative model worked:", altResult);
-            return res.status(200).json({
-              original: "Audio processed with alternative model (speech recognition)",
-              cleaned: "Audio processed with alternative model (speech recognition)",
-              audio: null,
-              transcription: altResult.text || "No transcription available"
-            });
-          }
-        } catch (altErr) {
-          console.log("Alternative model also failed:", altErr.message);
-        }
-        
-        // Final fallback
-        console.log("Using final fallback...");
-        return res.status(200).json({
-          original: "The CleanSong model is not available. This is a fallback response showing that the audio compression is working correctly.",
-          cleaned: "The CleanSong model is not available. This is a fallback response showing that the audio compression is working correctly.",
-          audio: null,
-          note: "Audio file was successfully compressed and processed, but the CleanSong model is not available."
-        });
-      }
-      
-      // If test worked, try with actual audio
-      console.log("Model exists, calling with audio...");
-      const response = await fetch("https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          inputs: `data:audio/wav;base64,${base64Audio}`
-        })
-      });
-      
-      // Check if response is JSON
-      const contentType = response.headers.get("content-type");
-      console.log("Response content-type:", contentType);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("API Error response:", errorText.substring(0, 500));
-        return res.status(500).json({ 
-          error: `Hugging Face API error (${response.status}): ${errorText.substring(0, 200)}...` 
-        });
-      }
-      
-      if (!contentType || !contentType.includes("application/json")) {
-        const textResponse = await response.text();
-        console.log("Non-JSON response received (first 1000 chars):", textResponse.substring(0, 1000));
-        return res.status(500).json({ 
-          error: `Hugging Face API returned non-JSON response: ${textResponse.substring(0, 200)}...` 
-        });
-      }
-      
-      apiResponse = await response.json();
-      console.log("Hugging Face API response:", apiResponse);
     } catch (e) {
-      console.log("Error calling Hugging Face Space REST API:", e.message, e.stack);
+      console.log("Error calling CleanSong Gradio API:", e.message, e.stack);
       
       // Fallback: Return mock response for testing
       console.log("Using fallback mock response...");
       return res.status(200).json({
         original: "This is a fallback response. The CleanSong API is not available.",
         cleaned: "This is a fallback response. The CleanSong API is not available.",
-        audio: null
+        audio: null,
+        error: e.message
       });
     }
 
     // Parse and return the outputs
     try {
-      console.log("Parsing API response:", apiResponse);
+      console.log("Parsing Gradio API response:", apiResponse);
       
-      // Handle different response formats
+      // Handle Gradio response format
       let original, cleaned, audio;
       
       if (apiResponse.data && Array.isArray(apiResponse.data)) {
-        // Spaces API format
+        // Gradio API format - data array
         original = apiResponse.data[0];
         cleaned = apiResponse.data[1];
         audio = apiResponse.data[2];
@@ -200,9 +121,9 @@ app.post('/api/process', async (req, res) => {
         cleaned = apiResponse[1];
         audio = apiResponse[2];
       } else {
-        console.log("Unknown response format:", apiResponse);
+        console.log("Unknown Gradio response format:", apiResponse);
         return res.status(500).json({ 
-          error: `Unknown response format from Hugging Face API: ${JSON.stringify(apiResponse).substring(0, 200)}...` 
+          error: `Unknown response format from Gradio API: ${JSON.stringify(apiResponse).substring(0, 200)}...` 
         });
       }
       
