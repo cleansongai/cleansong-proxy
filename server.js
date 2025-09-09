@@ -43,9 +43,12 @@ app.post('/api/process', async (req, res) => {
     // Check for HF_TOKEN
     if (!process.env.HF_TOKEN) {
       console.log("Missing HF_TOKEN environment variable");
-      return res.status(500).json({ error: "Missing HF_TOKEN environment variable" });
+      return res.status(500).json({ 
+        error: "Missing HF_TOKEN environment variable. Please set it with: $env:HF_TOKEN=\"your_token_here\"" 
+      });
     }
     console.log("HF_TOKEN is present");
+    console.log("Note: Make sure your token has 'Write' permissions for Hugging Face Spaces API");
 
     // Decode base64 from frontend
     let buffer;
@@ -63,21 +66,55 @@ app.post('/api/process', async (req, res) => {
     let apiResponse;
     try {
       console.log("Calling Hugging Face Space REST API...");
-      console.log("API URL: https://CleanSong-Lyric-Cleaner.hf.space/api/predict/");
       console.log("Token present:", !!process.env.HF_TOKEN);
+      console.log("Token length:", process.env.HF_TOKEN ? process.env.HF_TOKEN.length : 0);
       
-      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          data: [
-            `data:audio/wav;base64,${base64Audio}`
-          ]
-        })
-      });
+      // Try multiple API endpoint formats
+      const apiEndpoints = [
+        "https://CleanSong-Lyric-Cleaner.hf.space/api/predict/",
+        "https://hf.space/embed/CleanSong/Lyric-Cleaner/api/predict/",
+        "https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner"
+      ];
+      
+      let response;
+      let lastError;
+      
+      for (const endpoint of apiEndpoints) {
+        try {
+          console.log(`Trying endpoint: ${endpoint}`);
+          
+          const requestBody = endpoint.includes("api-inference") 
+            ? { inputs: `data:audio/wav;base64,${base64Audio}` }
+            : { data: [`data:audio/wav;base64,${base64Audio}`] };
+          
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(requestBody)
+          });
+          
+          console.log(`Response status for ${endpoint}:`, response.status);
+          
+          if (response.ok) {
+            console.log(`Success with endpoint: ${endpoint}`);
+            break;
+          } else {
+            const errorText = await response.text();
+            console.log(`Error with ${endpoint}:`, errorText.substring(0, 200));
+            lastError = errorText;
+          }
+        } catch (err) {
+          console.log(`Exception with ${endpoint}:`, err.message);
+          lastError = err.message;
+        }
+      }
+      
+      if (!response || !response.ok) {
+        throw new Error(`All API endpoints failed. Last error: ${lastError}`);
+      }
       
       console.log("Response status:", response.status);
       console.log("Response headers:", Object.fromEntries(response.headers.entries()));
