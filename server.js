@@ -69,9 +69,69 @@ app.post('/api/process', async (req, res) => {
       console.log("Token present:", !!process.env.HF_TOKEN);
       console.log("Token length:", process.env.HF_TOKEN ? process.env.HF_TOKEN.length : 0);
       
-      // Call Hugging Face API directly from server
-      console.log("Calling Hugging Face API from server...");
+      // Test if the model exists first
+      console.log("Testing if CleanSong model exists...");
       
+      // First, let's try a simple test call to see what we get
+      const testResponse = await fetch("https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          inputs: "test"
+        })
+      });
+      
+      console.log("Test response status:", testResponse.status);
+      const testText = await testResponse.text();
+      console.log("Test response content (first 500 chars):", testText.substring(0, 500));
+      
+      // If the model doesn't exist, try a different approach
+      if (testResponse.status === 404 || testText.includes("Model") || testText.includes("not found") || testText.includes("<")) {
+        console.log("CleanSong model not found, trying alternative approach...");
+        
+        // Try using a different model that might work for audio processing
+        try {
+          console.log("Trying alternative model...");
+          const altResponse = await fetch("https://api-inference.huggingface.co/models/facebook/wav2vec2-base-960h", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              inputs: `data:audio/wav;base64,${base64Audio}`
+            })
+          });
+          
+          if (altResponse.ok) {
+            const altResult = await altResponse.json();
+            console.log("Alternative model worked:", altResult);
+            return res.status(200).json({
+              original: "Audio processed with alternative model (speech recognition)",
+              cleaned: "Audio processed with alternative model (speech recognition)",
+              audio: null,
+              transcription: altResult.text || "No transcription available"
+            });
+          }
+        } catch (altErr) {
+          console.log("Alternative model also failed:", altErr.message);
+        }
+        
+        // Final fallback
+        console.log("Using final fallback...");
+        return res.status(200).json({
+          original: "The CleanSong model is not available. This is a fallback response showing that the audio compression is working correctly.",
+          cleaned: "The CleanSong model is not available. This is a fallback response showing that the audio compression is working correctly.",
+          audio: null,
+          note: "Audio file was successfully compressed and processed, but the CleanSong model is not available."
+        });
+      }
+      
+      // If test worked, try with actual audio
+      console.log("Model exists, calling with audio...");
       const response = await fetch("https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner", {
         method: "POST",
         headers: {
