@@ -69,84 +69,42 @@ app.post('/api/process', async (req, res) => {
       console.log("Token present:", !!process.env.HF_TOKEN);
       console.log("Token length:", process.env.HF_TOKEN ? process.env.HF_TOKEN.length : 0);
       
-      // Try multiple API endpoint formats
-      const apiEndpoints = [
-        "https://CleanSong-Lyric-Cleaner.hf.space/api/predict/",
-        "https://hf.space/embed/CleanSong/Lyric-Cleaner/api/predict/",
-        "https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner"
-      ];
+      // Call Hugging Face API directly from server
+      console.log("Calling Hugging Face API from server...");
       
-      let response;
-      let lastError;
-      
-      for (const endpoint of apiEndpoints) {
-        try {
-          console.log(`Trying endpoint: ${endpoint}`);
-          
-          const requestBody = endpoint.includes("api-inference") 
-            ? { inputs: `data:audio/wav;base64,${base64Audio}` }
-            : { data: [`data:audio/wav;base64,${base64Audio}`] };
-          
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(requestBody)
-          });
-          
-          console.log(`Response status for ${endpoint}:`, response.status);
-          
-          if (response.ok) {
-            console.log(`Success with endpoint: ${endpoint}`);
-            break;
-          } else {
-            const errorText = await response.text();
-            console.log(`Error with ${endpoint}:`, errorText.substring(0, 200));
-            lastError = errorText;
-          }
-        } catch (err) {
-          console.log(`Exception with ${endpoint}:`, err.message);
-          lastError = err.message;
-        }
-      }
-      
-      if (!response || !response.ok) {
-        throw new Error(`All API endpoints failed. Last error: ${lastError}`);
-      }
-      
-      console.log("Response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+      const response = await fetch("https://api-inference.huggingface.co/models/CleanSong/Lyric-Cleaner", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          inputs: `data:audio/wav;base64,${base64Audio}`
+        })
+      });
       
       // Check if response is JSON
       const contentType = response.headers.get("content-type");
       console.log("Response content-type:", contentType);
       
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("API Error response:", errorText.substring(0, 500));
+        return res.status(500).json({ 
+          error: `Hugging Face API error (${response.status}): ${errorText.substring(0, 200)}...` 
+        });
+      }
+      
       if (!contentType || !contentType.includes("application/json")) {
         const textResponse = await response.text();
         console.log("Non-JSON response received (first 1000 chars):", textResponse.substring(0, 1000));
-        
-        // Try to parse as JSON anyway in case content-type is wrong
-        try {
-          const jsonResponse = JSON.parse(textResponse);
-          console.log("Successfully parsed as JSON despite content-type:", jsonResponse);
-          apiResponse = jsonResponse;
-        } catch (parseError) {
-          console.log("Failed to parse as JSON:", parseError.message);
-          return res.status(500).json({ 
-            error: `Hugging Face API returned non-JSON response (${response.status}): ${textResponse.substring(0, 200)}...` 
-          });
-        }
-      } else {
-        apiResponse = await response.json();
+        return res.status(500).json({ 
+          error: `Hugging Face API returned non-JSON response: ${textResponse.substring(0, 200)}...` 
+        });
       }
       
+      apiResponse = await response.json();
       console.log("Hugging Face API response:", apiResponse);
-      
-      if (!response.ok) {
-        return res.status(500).json({ error: apiResponse.error || `Hugging Face API error (${response.status})` });
-      }
     } catch (e) {
       console.log("Error calling Hugging Face Space REST API:", e.message, e.stack);
       
@@ -161,15 +119,37 @@ app.post('/api/process', async (req, res) => {
 
     // Parse and return the outputs
     try {
-      const result = apiResponse;
-      if (!result || !result.data) {
-        console.log("Result or result.data is undefined", result);
-        return res.status(500).json({ error: "No data returned from Hugging Face Space" });
+      console.log("Parsing API response:", apiResponse);
+      
+      // Handle different response formats
+      let original, cleaned, audio;
+      
+      if (apiResponse.data && Array.isArray(apiResponse.data)) {
+        // Spaces API format
+        original = apiResponse.data[0];
+        cleaned = apiResponse.data[1];
+        audio = apiResponse.data[2];
+      } else if (apiResponse.original && apiResponse.cleaned) {
+        // Direct format
+        original = apiResponse.original;
+        cleaned = apiResponse.cleaned;
+        audio = apiResponse.audio;
+      } else if (Array.isArray(apiResponse) && apiResponse.length >= 2) {
+        // Array format
+        original = apiResponse[0];
+        cleaned = apiResponse[1];
+        audio = apiResponse[2];
+      } else {
+        console.log("Unknown response format:", apiResponse);
+        return res.status(500).json({ 
+          error: `Unknown response format from Hugging Face API: ${JSON.stringify(apiResponse).substring(0, 200)}...` 
+        });
       }
+      
       return res.status(200).json({
-        original: result.data[0],
-        cleaned: result.data[1],
-        audio: result.data[2]
+        original: original || "No original lyrics found",
+        cleaned: cleaned || "No cleaned lyrics found", 
+        audio: audio || null
       });
     } catch (err) {
       console.error("General error:", err.stack || err);
