@@ -9,11 +9,23 @@ const app = express();
 const PORT = 3000;
 
 // Increase payload size limit for large audio files (50MB)
+// Apply these limits before any other middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Error handling middleware for payload too large
+app.use((error, req, res, next) => {
+  if (error.type === 'entity.too.large') {
+    console.log("Payload too large error caught:", error.message);
+    return res.status(413).json({ 
+      error: "File too large. Please try with a smaller audio file or ensure compression is working." 
+    });
+  }
+  next(error);
+});
 
 // API endpoint for processing
 app.post('/api/process', async (req, res) => {

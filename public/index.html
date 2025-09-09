@@ -234,15 +234,20 @@ btn.onclick = async () => {
 
   // Compress audio if it's large
   let processedFile = file;
+  console.log(`Original file size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  
   if (file.size > 2 * 1024 * 1024) { // 2MB
     statusDiv.textContent = "Compressing audio...";
     try {
       processedFile = await compressAudio(file);
       console.log(`Compressed from ${(file.size / (1024 * 1024)).toFixed(2)}MB to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`);
+      statusDiv.textContent = `Compressed to ${(processedFile.size / (1024 * 1024)).toFixed(2)}MB`;
     } catch (err) {
       console.error("Compression failed:", err);
       statusDiv.textContent = "Compression failed, using original file...";
     }
+  } else {
+    console.log("File is small enough, no compression needed");
   }
 
   const reader = new FileReader();
