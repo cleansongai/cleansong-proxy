@@ -63,7 +63,10 @@ app.post('/api/process', async (req, res) => {
     let apiResponse;
     try {
       console.log("Calling Hugging Face Space REST API...");
-      const response = await fetch("https://hf.space/embed/CleanSong/Lyric-Cleaner/api/predict/", {
+      console.log("API URL: https://CleanSong-Lyric-Cleaner.hf.space/api/predict/");
+      console.log("Token present:", !!process.env.HF_TOKEN);
+      
+      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${process.env.HF_TOKEN}`,
@@ -75,10 +78,25 @@ app.post('/api/process', async (req, res) => {
           ]
         })
       });
+      
+      console.log("Response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+      
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const textResponse = await response.text();
+        console.log("Non-JSON response received:", textResponse.substring(0, 500));
+        return res.status(500).json({ 
+          error: `Hugging Face API returned non-JSON response (${response.status}): ${textResponse.substring(0, 200)}...` 
+        });
+      }
+      
       apiResponse = await response.json();
       console.log("Hugging Face API response:", apiResponse);
+      
       if (!response.ok) {
-        return res.status(500).json({ error: apiResponse.error || "Hugging Face API error" });
+        return res.status(500).json({ error: apiResponse.error || `Hugging Face API error (${response.status})` });
       }
     } catch (e) {
       console.log("Error calling Hugging Face Space REST API:", e.message, e.stack);
