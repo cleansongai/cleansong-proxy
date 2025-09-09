@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Client } from '@gradio/client';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,30 +62,38 @@ app.post('/api/process', async (req, res) => {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong using Gradio client
+    // Call CleanSong using direct Gradio space API
     let apiResponse;
     try {
-      console.log("Connecting to CleanSong/Lyric-Cleaner using Gradio client...");
+      console.log("Calling CleanSong/Lyric-Cleaner Gradio space directly...");
       
-      // Connect to the Gradio space
-      const client = await Client.connect("CleanSong/Lyric-Cleaner");
-      console.log("Connected to Gradio space successfully");
-      
-      // Convert base64 to blob
+      // Create FormData for file upload
+      const formData = new FormData();
       const audioBlob = new Blob([buffer], { type: 'audio/wav' });
+      formData.append('files', audioBlob, 'audio.wav');
+      
       console.log("Created audio blob, size:", audioBlob.size);
       
-      // Call the process_song endpoint
-      console.log("Calling /process_song endpoint...");
-      const result = await client.predict("/process_song", {
-        audio_path: audioBlob
+      // Call the Gradio space API directly
+      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
+        method: "POST",
+        body: formData
       });
       
-      console.log("Gradio API response:", result);
+      console.log("Gradio space response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("Gradio space error:", errorText.substring(0, 500));
+        throw new Error(`Gradio space error (${response.status}): ${errorText.substring(0, 200)}`);
+      }
+      
+      const result = await response.json();
+      console.log("Gradio space response:", result);
       apiResponse = result;
       
     } catch (e) {
-      console.log("Error calling CleanSong Gradio API:", e.message, e.stack);
+      console.log("Error calling CleanSong Gradio space:", e.message, e.stack);
       
       // Fallback: Return mock response for testing
       console.log("Using fallback mock response...");
