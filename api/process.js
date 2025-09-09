@@ -60,16 +60,48 @@ export default async function handler(req, res) {
       const audioDataUrl = `data:audio/wav;base64,${base64Audio}`;
       console.log("Created audio data URL, length:", audioDataUrl.length);
       
-      // Call the Gradio space API with correct JSON format
-      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          data: [audioDataUrl]
-        })
-      });
+      // Try different possible CleanSong space URLs
+      const possibleUrls = [
+        "https://CleanSong-Lyric-Cleaner.hf.space/api/predict/",
+        "https://cleansong-lyric-cleaner.hf.space/api/predict/",
+        "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner",
+        "https://hf.space/embed/CleanSong/Lyric-Cleaner/api/predict/"
+      ];
+      
+      let response;
+      let workingUrl = null;
+      
+      for (const url of possibleUrls) {
+        try {
+          console.log(`Trying URL: ${url}`);
+          response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              data: [audioDataUrl]
+            })
+          });
+          
+          console.log(`Response status for ${url}:`, response.status);
+          
+          if (response.ok) {
+            workingUrl = url;
+            console.log(`Success with URL: ${url}`);
+            break;
+          } else {
+            const errorText = await response.text();
+            console.log(`Error with ${url}:`, errorText.substring(0, 200));
+          }
+        } catch (err) {
+          console.log(`Exception with ${url}:`, err.message);
+        }
+      }
+      
+      if (!workingUrl) {
+        throw new Error("All CleanSong URLs failed");
+      }
       
       console.log("Gradio space response status:", response.status);
       console.log("Response headers:", Object.fromEntries(response.headers.entries()));
@@ -117,6 +149,35 @@ export default async function handler(req, res) {
         }
       } catch (altError) {
         console.log("Alternative approach also failed:", altError.message);
+        
+        // Try using a different audio processing service as fallback
+        try {
+          console.log("Trying alternative audio processing service...");
+          const altResponse = await fetch("https://api-inference.huggingface.co/models/facebook/wav2vec2-base-960h", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              inputs: audioDataUrl
+            })
+          });
+          
+          if (altResponse.ok) {
+            const altResult = await altResponse.json();
+            console.log("Alternative service worked:", altResult);
+            return res.status(200).json({
+              original: "Audio processed with speech recognition (CleanSong not available)",
+              cleaned: "Audio processed with speech recognition (CleanSong not available)",
+              audio: null,
+              transcription: altResult.text || "No transcription available",
+              note: "CleanSong API is not available, but audio was processed with speech recognition."
+            });
+          }
+        } catch (altError) {
+          console.log("Alternative service also failed:", altError.message);
+        }
         
         // Final fallback: Return mock response for testing
         console.log("Using fallback mock response...");
