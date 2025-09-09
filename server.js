@@ -62,25 +62,36 @@ app.post('/api/process', async (req, res) => {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong using direct Gradio space API
+    // Call CleanSong using correct Gradio space API format
     let apiResponse;
     try {
-      console.log("Calling CleanSong/Lyric-Cleaner Gradio space directly...");
+      console.log("Calling CleanSong/Lyric-Cleaner Gradio space with correct format...");
       
-      // Create FormData for file upload
-      const formData = new FormData();
-      const audioBlob = new Blob([buffer], { type: 'audio/wav' });
-      formData.append('files', audioBlob, 'audio.wav');
+      // Convert audio to base64 data URL
+      const audioDataUrl = `data:audio/wav;base64,${base64Audio}`;
+      console.log("Created audio data URL, length:", audioDataUrl.length);
       
-      console.log("Created audio blob, size:", audioBlob.size);
-      
-      // Call the Gradio space API directly
+      // Call the Gradio space API with correct JSON format
       const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
         method: "POST",
-        body: formData
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          data: [audioDataUrl]
+        })
       });
       
       console.log("Gradio space response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+      
+      // Check if response is HTML (error page)
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const htmlResponse = await response.text();
+        console.log("HTML response received (first 1000 chars):", htmlResponse.substring(0, 1000));
+        throw new Error(`Gradio space returned HTML instead of JSON. Status: ${response.status}`);
+      }
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -95,14 +106,39 @@ app.post('/api/process', async (req, res) => {
     } catch (e) {
       console.log("Error calling CleanSong Gradio space:", e.message, e.stack);
       
-      // Fallback: Return mock response for testing
-      console.log("Using fallback mock response...");
-      return res.status(200).json({
-        original: "This is a fallback response. The CleanSong API is not available.",
-        cleaned: "This is a fallback response. The CleanSong API is not available.",
-        audio: null,
-        error: e.message
-      });
+      // Try alternative approach with different endpoint
+      try {
+        console.log("Trying alternative Gradio space endpoint...");
+        const altResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            data: [`data:audio/wav;base64,${base64Audio}`]
+          })
+        });
+        
+        if (altResponse.ok) {
+          const altResult = await altResponse.json();
+          console.log("Alternative endpoint worked:", altResult);
+          apiResponse = altResult;
+        } else {
+          throw new Error("Alternative endpoint also failed");
+        }
+      } catch (altError) {
+        console.log("Alternative approach also failed:", altError.message);
+        
+        // Final fallback: Return mock response for testing
+        console.log("Using fallback mock response...");
+        return res.status(200).json({
+          original: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+          cleaned: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+          audio: null,
+          error: e.message,
+          note: "Audio file was successfully compressed and processed, but the CleanSong API is not responding correctly."
+        });
+      }
     }
 
     // Parse and return the outputs
