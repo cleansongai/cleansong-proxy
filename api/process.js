@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import GradioClient from "@gradio/client";
+import { client, handle_file } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -59,17 +59,7 @@ export default async function handler(req, res) {
       console.log("Buffer length:", buffer.length);
       
       // Connect to the CleanSong space using Gradio client
-      console.log("GradioClient:", GradioClient);
-      console.log("Available methods:", Object.keys(GradioClient));
-      
-      // Access Client and handle_file from the default export
-      const Client = GradioClient.Client || GradioClient.default?.Client || GradioClient;
-      const handle_file = GradioClient.handle_file || GradioClient.default?.handle_file;
-      
-      console.log("Client:", Client);
-      console.log("handle_file:", handle_file);
-      
-      const client = await Client.connect("CleanSong/Lyric-Cleaner");
+      const app = await client("CleanSong/Lyric-Cleaner");
       console.log("Connected to CleanSong space successfully");
       
       // Use handle_file to properly format the audio data
@@ -77,10 +67,8 @@ export default async function handler(req, res) {
       console.log("Created audio file using handle_file, size:", buffer.length);
       
       // Use the exact API call format from Hugging Face docs
-      console.log("Calling /process_song with audio_path parameter...");
-      const result = await client.predict("/process_song", { 
-        audio_path: audioFile
-      });
+      console.log("Calling /process_song with audio file...");
+      const result = await app.predict("/process_song", [audioFile]);
       
       console.log("CleanSong API response:", result);
       console.log("CleanSong API response data:", result.data);
