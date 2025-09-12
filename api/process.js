@@ -97,14 +97,51 @@ export default async function handler(req, res) {
       }
       
       // Use the exact Gradio client approach from the code snippet
+      console.log("=== GRADIO CLIENT DEBUGGING ===");
       console.log("Using Gradio client with exact code snippet format...");
+      console.log("HF_TOKEN present:", !!hfToken);
+      console.log("HF_TOKEN length:", hfToken ? hfToken.length : 0);
+      console.log("Buffer length:", buffer.length);
+      console.log("Base64 audio length:", base64Audio.length);
       
       try {
-        // Connect to the CleanSong space
-        const app = await client("CleanSong/Lyric-Cleaner");
-        console.log("Connected to CleanSong space successfully");
+        // Try different space name formats with authentication
+        let app;
+        const spaceNames = [
+          "CleanSong/Lyric-Cleaner",
+          "CleanSong-Lyric-Cleaner"
+        ];
+        
+        console.log("=== ATTEMPTING SPACE CONNECTIONS ===");
+        for (const spaceName of spaceNames) {
+          try {
+            console.log(`\n--- Trying space name: ${spaceName} ---`);
+            console.log("Calling client() with:", { spaceName, hasToken: !!hfToken });
+            
+            app = await client(spaceName, {
+              hf_token: hfToken
+            });
+            
+            console.log(`✅ SUCCESS: Connected to ${spaceName} successfully!`);
+            console.log("App object:", typeof app);
+            console.log("App methods:", Object.getOwnPropertyNames(app));
+            break;
+          } catch (e) {
+            console.log(`❌ FAILED: ${spaceName}`);
+            console.log("Error type:", e.constructor.name);
+            console.log("Error message:", e.message);
+            console.log("Error stack:", e.stack);
+            console.log("---");
+          }
+        }
+        
+        if (!app) {
+          console.log("❌ ALL CONNECTION ATTEMPTS FAILED");
+          throw new Error("Could not connect to CleanSong space with any name format");
+        }
         
         // Create the exact file object format from the code snippet
+        console.log("\n=== CREATING AUDIO FILE OBJECT ===");
         const fileId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
         const filePath = `/tmp/gradio/${fileId}/audio.wav`;
         
@@ -117,18 +154,28 @@ export default async function handler(req, res) {
           meta: {"_type": "gradio.FileData"}
         };
         
-        console.log("Created audio file object:", {
-          path: audioFile.path,
-          size: audioFile.size,
-          mime_type: audioFile.mime_type
-        });
+        console.log("File ID:", fileId);
+        console.log("File path:", filePath);
+        console.log("Audio file object:", JSON.stringify(audioFile, null, 2));
         
         // Use the exact predict call from the code snippet
+        console.log("\n=== CALLING PREDICT ===");
+        console.log("Calling app.predict with:");
+        console.log("- Endpoint: /process_song");
+        console.log("- Audio file size:", audioFile.size);
+        console.log("- Audio file type:", audioFile.mime_type);
+        
         const result = await app.predict("/process_song", {
           audio_path: audioFile
         });
         
-        console.log("CleanSong API response:", result);
+        console.log("✅ PREDICT SUCCESS!");
+        console.log("Result type:", typeof result);
+        console.log("Result keys:", Object.keys(result));
+        console.log("Result.data:", result.data);
+        console.log("Result.data type:", typeof result.data);
+        console.log("Result.data length:", Array.isArray(result.data) ? result.data.length : 'not array');
+        
         apiResponse = result.data;
         
       } catch (e) {
