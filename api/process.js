@@ -73,17 +73,57 @@ export default async function handler(req, res) {
       const base64Audio = buffer.toString('base64');
       console.log("Created base64 audio, length:", base64Audio.length);
       
-      // Use direct fetch with authentication headers
-      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/process_song", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${hfToken}`
-        },
-        body: JSON.stringify({
-          data: [base64Audio]
-        })
-      });
+      // Try different Gradio API endpoints and body formats
+      let response;
+      const endpoints = [
+        "/api/predict/",
+        "/run/predict", 
+        "/api/predict",
+        "/predict"
+      ];
+      
+      const bodyFormats = [
+        { data: [base64Audio] },
+        { inputs: [base64Audio] },
+        [base64Audio],
+        { audio: base64Audio }
+      ];
+      
+      let success = false;
+      
+      for (const endpoint of endpoints) {
+        for (const bodyFormat of bodyFormats) {
+          try {
+            console.log(`Trying endpoint: ${endpoint} with body:`, Object.keys(bodyFormat).length > 0 ? Object.keys(bodyFormat) : 'array');
+            response = await fetch(`https://CleanSong-Lyric-Cleaner.hf.space${endpoint}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${hfToken}`
+              },
+              body: JSON.stringify(bodyFormat)
+            });
+            
+            console.log(`Response status:`, response.status);
+            
+            if (response.ok) {
+              console.log(`Success with endpoint: ${endpoint} and body format:`, Object.keys(bodyFormat).length > 0 ? Object.keys(bodyFormat) : 'array');
+              success = true;
+              break;
+            } else {
+              const errorText = await response.text();
+              console.log(`Failed:`, errorText.substring(0, 100));
+            }
+          } catch (e) {
+            console.log(`Error:`, e.message);
+          }
+        }
+        if (success) break;
+      }
+      
+      if (!success) {
+        throw new Error("All API endpoints and body formats failed");
+      }
       
       console.log("CleanSong API response status:", response.status);
       console.log("Response headers:", Object.fromEntries(response.headers.entries()));
