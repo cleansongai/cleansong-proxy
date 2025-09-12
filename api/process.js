@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import { Client, handle_file } from "@gradio/client";
+import GradioClient from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -59,6 +59,16 @@ export default async function handler(req, res) {
       console.log("Buffer length:", buffer.length);
       
       // Connect to the CleanSong space using Gradio client
+      console.log("GradioClient:", GradioClient);
+      console.log("Available methods:", Object.keys(GradioClient));
+      
+      // Access Client and handle_file from the default export
+      const Client = GradioClient.Client || GradioClient.default?.Client || GradioClient;
+      const handle_file = GradioClient.handle_file || GradioClient.default?.handle_file;
+      
+      console.log("Client:", Client);
+      console.log("handle_file:", handle_file);
+      
       const client = await Client.connect("CleanSong/Lyric-Cleaner");
       console.log("Connected to CleanSong space successfully");
       
