@@ -73,61 +73,68 @@ export default async function handler(req, res) {
       const base64Audio = buffer.toString('base64');
       console.log("Created base64 audio, length:", base64Audio.length);
       
-      // First, let's check what endpoints are available
-      console.log("Checking available endpoints...");
+      // Try to get the API info from the space
+      console.log("Getting API information from the space...");
       
-      // Try to get the space info first
-      let spaceInfo;
+      let apiInfo;
       try {
-        const infoResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/", {
+        const apiResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/", {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${hfToken}`
           }
         });
-        console.log("Space info response status:", infoResponse.status);
+        console.log("API info response status:", apiResponse.status);
         
-        if (infoResponse.ok) {
-          const infoText = await infoResponse.text();
-          console.log("Space info (first 500 chars):", infoText.substring(0, 500));
-          
-          // Look for API endpoints in the HTML
-          const apiMatches = infoText.match(/\/api\/[^"'\s]+/g);
-          if (apiMatches) {
-            console.log("Found API endpoints in HTML:", apiMatches);
-          }
+        if (apiResponse.ok) {
+          apiInfo = await apiResponse.json();
+          console.log("API info:", JSON.stringify(apiInfo, null, 2));
+        } else {
+          const errorText = await apiResponse.text();
+          console.log("API info error:", errorText.substring(0, 200));
         }
       } catch (e) {
-        console.log("Error getting space info:", e.message);
+        console.log("Error getting API info:", e.message);
       }
       
-      // Try the specific endpoint from the original documentation
-      console.log("Trying the specific /process_song endpoint...");
-      let response;
-      try {
-        response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/process_song", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${hfToken}`
-          },
-          body: JSON.stringify({
-            data: [base64Audio]
-          })
-        });
-        
-        console.log("Process_song response status:", response.status);
-        
-        if (response.ok) {
-          console.log("Success with /process_song endpoint!");
-        } else {
-          const errorText = await response.text();
-          console.log("Process_song failed:", errorText.substring(0, 200));
-          throw new Error(`Process_song endpoint failed: ${errorText}`);
-        }
-      } catch (e) {
-        console.log("Process_song error:", e.message);
-        throw new Error(`All API attempts failed. Last error: ${e.message}`);
+      // Use the exact API format from the documentation
+      console.log("Using the exact API format from documentation...");
+      
+      // Create a file-like object that matches the FileData class
+      const audioFile = {
+        path: `data:audio/wav;base64,${base64Audio}`,
+        url: `data:audio/wav;base64,${base64Audio}`,
+        size: buffer.length,
+        orig_name: 'audio.wav',
+        mime_type: 'audio/wav',
+        is_stream: false,
+        meta: {}
+      };
+      
+      console.log("Created audio file object:", {
+        path: audioFile.path.substring(0, 50) + "...",
+        size: audioFile.size,
+        mime_type: audioFile.mime_type
+      });
+      
+      // Try the correct endpoint with the correct parameter format
+      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/process_song", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${hfToken}`
+        },
+        body: JSON.stringify({
+          data: [audioFile]
+        })
+      });
+      
+      console.log("Process_song response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("Process_song failed:", errorText.substring(0, 200));
+        throw new Error(`Process_song endpoint failed: ${errorText}`);
       }
       
       console.log("CleanSong API response status:", response.status);
