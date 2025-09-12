@@ -65,9 +65,9 @@ export default async function handler(req, res) {
       
       // Try different possible API endpoints for the CleanSong space
       const possibleEndpoints = [
-        "https://CleanSong-Lyric-Cleaner.hf.space/run/predict",
-        "https://CleanSong-Lyric-Cleaner.hf.space/api/predict/",
-        "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/api/predict/"
+        "https://CleanSong-Lyric-Cleaner.hf.space/run/process_song",
+        "https://CleanSong-Lyric-Cleaner.hf.space/api/process_song/",
+        "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/api/process_song/"
       ];
       
       let response;
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         // Try JSON format as fallback
         console.log("Trying JSON format as fallback...");
         try {
-          const jsonResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
+          const jsonResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/process_song/", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
