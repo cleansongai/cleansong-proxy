@@ -1,7 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-// Note: @gradio/client has window dependency issues in serverless environments
-// Using direct fetch approach instead
+import { Client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -97,78 +96,47 @@ export default async function handler(req, res) {
         console.log("Error getting API info:", e.message);
       }
       
-      // Try different Gradio API endpoints based on common patterns
-      console.log("Trying different Gradio API endpoints...");
+      // Use the exact Gradio client approach from the code snippet
+      console.log("Using Gradio client with exact code snippet format...");
       
-      const endpoints = [
-        "/api/predict/",
-        "/run/predict",
-        "/api/predict",
-        "/predict",
-        "/gradio_api/predict/",
-        "/gradio_api/run/predict"
-      ];
-      
-      let response;
-      let success = false;
-      
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`Trying endpoint: ${endpoint}`);
-          
-          // Create a simple file object for each attempt
-          const audioFile = {
-            path: `data:audio/wav;base64,${base64Audio}`,
-            url: `data:audio/wav;base64,${base64Audio}`,
-            orig_name: 'audio.wav',
-            size: buffer.length,
-            mime_type: 'audio/wav',
-            meta: {"_type": "gradio.FileData"}
-          };
-          
-          response = await fetch(`https://cleansong-lyric-cleaner.hf.space${endpoint}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              data: [audioFile]
-            })
-          });
-          
-          console.log(`Endpoint ${endpoint} response status:`, response.status);
-          
-          if (response.ok) {
-            console.log(`Success with endpoint: ${endpoint}`);
-            success = true;
-            break;
-          } else {
-            const errorText = await response.text();
-            console.log(`Endpoint ${endpoint} failed:`, errorText.substring(0, 100));
-          }
-        } catch (e) {
-          console.log(`Endpoint ${endpoint} error:`, e.message);
-        }
+      try {
+        // Connect to the CleanSong space
+        const app = await Client.connect("CleanSong/Lyric-Cleaner");
+        console.log("Connected to CleanSong space successfully");
+        
+        // Create the exact file object format from the code snippet
+        const fileId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        const filePath = `/tmp/gradio/${fileId}/audio.wav`;
+        
+        const audioFile = {
+          path: filePath,
+          url: `https://cleansong-lyric-cleaner.hf.space/gradio_api/file=${filePath}`,
+          orig_name: 'audio.wav',
+          size: buffer.length,
+          mime_type: 'audio/wav',
+          meta: {"_type": "gradio.FileData"}
+        };
+        
+        console.log("Created audio file object:", {
+          path: audioFile.path,
+          size: audioFile.size,
+          mime_type: audioFile.mime_type
+        });
+        
+        // Use the exact predict call from the code snippet
+        const result = await app.predict("/process_song", {
+          audio_path: audioFile
+        });
+        
+        console.log("CleanSong API response:", result);
+        apiResponse = result.data;
+        
+      } catch (e) {
+        console.log("Error with Gradio client:", e.message, e.stack);
+        throw new Error(`Gradio client failed: ${e.message}`);
       }
       
-      if (!success) {
-        throw new Error("All Gradio API endpoints failed. The space may not have API access enabled or may use a different API structure.");
-      }
-      
-      console.log("CleanSong API response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("CleanSong API error:", errorText.substring(0, 500));
-        throw new Error(`CleanSong API error (${response.status}): ${errorText.substring(0, 200)}`);
-      }
-      
-      const result = await response.json();
-      console.log("CleanSong API response:", result);
-      
-      // The response should have a 'data' property containing the array
-      apiResponse = result.data;
+      // Response is already processed above
       
     } catch (e) {
       console.log("Error calling CleanSong with Gradio client:", e.message, e.stack);
