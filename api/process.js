@@ -1,6 +1,5 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import { Client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -52,44 +51,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong using the actual Gradio client
-    let apiResponse;
-    try {
-      console.log("Connecting to CleanSong using Gradio client...");
-      
-      // Connect to the CleanSong space using Gradio client
-      const client = await Client.connect("CleanSong/Lyric-Cleaner");
-      console.log("Connected to CleanSong space successfully");
-      
-      // Create audio blob from buffer
-      const audioBlob = new Blob([buffer], { type: 'audio/wav' });
-      console.log("Created audio blob, size:", audioBlob.size);
-      
-      // Use the exact API call format from Hugging Face docs
-      console.log("Calling /process_song with audio_path parameter...");
-      const result = await client.predict("/process_song", { 
-        audio_path: audioBlob
-      });
-      
-      console.log("CleanSong API response:", result);
-      console.log("CleanSong API response data:", result.data);
-      apiResponse = result.data;
-      
-    } catch (e) {
-      console.log("Error calling CleanSong with Gradio client:", e.message, e.stack);
-      
-      // Fallback: Return mock response for testing
-      console.log("Using fallback mock response...");
-      console.log("CleanSong API failed. Error details:", e.message);
-      
-      return res.status(200).json({
-        original: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
-        cleaned: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
-        audio: null,
-        error: e.message,
-        note: "Audio file was successfully compressed and processed, but the CleanSong API is not responding correctly. Check Vercel function logs for detailed error information."
-      });
-    }
+    // Test if the function works at all first
+    console.log("Testing basic functionality...");
+    console.log("Buffer length:", buffer.length);
+    console.log("Buffer type:", typeof buffer);
+    console.log("Buffer constructor:", buffer.constructor.name);
+    
+    // For now, just return a test response to see if the function works
+    return res.status(200).json({
+      original: "Test response - function is working",
+      cleaned: "Test response - function is working", 
+      audio: null,
+      bufferLength: buffer.length,
+      note: "This is a test to see if the Vercel function works at all"
+    });
 
     // Parse and return the outputs (as per Hugging Face docs)
     try {
