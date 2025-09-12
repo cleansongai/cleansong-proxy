@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import { client } from "@gradio/client";
+// Note: @gradio/client has window dependency issues in serverless environments
+// Using direct fetch approach instead
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -58,8 +59,8 @@ export default async function handler(req, res) {
       console.log("Connecting to CleanSong using Gradio client...");
       console.log("Buffer length:", buffer.length);
       
-      // Connect to private CleanSong space with authentication
-      console.log("Connecting to private CleanSong space...");
+      // Call CleanSong API directly with authentication
+      console.log("Calling CleanSong API directly with authentication...");
       
       // Check if we have authentication credentials
       const hfToken = process.env.HF_TOKEN;
@@ -68,28 +69,35 @@ export default async function handler(req, res) {
         throw new Error("Private space requires HF_TOKEN environment variable");
       }
       
-      console.log("Using HF_TOKEN for authentication...");
-      const app = await client("CleanSong/Lyric-Cleaner", {
-        hf_token: hfToken
+      // Convert buffer to base64 for transmission
+      const base64Audio = buffer.toString('base64');
+      console.log("Created base64 audio, length:", base64Audio.length);
+      
+      // Use direct fetch with authentication headers
+      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/process_song", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${hfToken}`
+        },
+        body: JSON.stringify({
+          data: [base64Audio]
+        })
       });
-      console.log("Connected to CleanSong space successfully with authentication");
       
-      // Create a file-like object for the audio data
-      const audioFile = {
-        name: 'audio.wav',
-        type: 'audio/wav',
-        size: buffer.length,
-        stream: () => Readable.from(buffer),
-        arrayBuffer: () => Promise.resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
-      };
-      console.log("Created audio file object, size:", buffer.length);
+      console.log("CleanSong API response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
       
-      // Use the exact API call format from Hugging Face docs
-      console.log("Calling /process_song with audio file...");
-      const result = await app.predict("/process_song", [audioFile]);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("CleanSong API error:", errorText.substring(0, 500));
+        throw new Error(`CleanSong API error (${response.status}): ${errorText.substring(0, 200)}`);
+      }
       
+      const result = await response.json();
       console.log("CleanSong API response:", result);
-      console.log("CleanSong API response data:", result.data);
+      
+      // The response should have a 'data' property containing the array
       apiResponse = result.data;
       
     } catch (e) {
