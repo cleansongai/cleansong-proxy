@@ -58,9 +58,30 @@ export default async function handler(req, res) {
       console.log("Connecting to CleanSong using Gradio client...");
       console.log("Buffer length:", buffer.length);
       
-      // Connect to the CleanSong space using Gradio client
-      const app = await client("CleanSong/Lyric-Cleaner");
-      console.log("Connected to CleanSong space successfully");
+      // Try different ways to connect to the CleanSong space
+      let app;
+      try {
+        console.log("Trying CleanSong/Lyric-Cleaner...");
+        app = await client("CleanSong/Lyric-Cleaner");
+        console.log("Connected to CleanSong/Lyric-Cleaner successfully");
+      } catch (e) {
+        console.log("CleanSong/Lyric-Cleaner failed:", e.message);
+        try {
+          console.log("Trying CleanSong-Lyric-Cleaner...");
+          app = await client("CleanSong-Lyric-Cleaner");
+          console.log("Connected to CleanSong-Lyric-Cleaner successfully");
+        } catch (e2) {
+          console.log("CleanSong-Lyric-Cleaner failed:", e2.message);
+          try {
+            console.log("Trying full URL...");
+            app = await client("https://CleanSong-Lyric-Cleaner.hf.space");
+            console.log("Connected to full URL successfully");
+          } catch (e3) {
+            console.log("All connection attempts failed:", e3.message);
+            throw new Error(`Could not connect to CleanSong space. Tried: CleanSong/Lyric-Cleaner, CleanSong-Lyric-Cleaner, and full URL. Last error: ${e3.message}`);
+          }
+        }
+      }
       
       // Create a file-like object for the audio data
       const audioFile = {
