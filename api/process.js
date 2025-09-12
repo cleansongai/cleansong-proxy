@@ -51,20 +51,57 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Test if the function works at all first
-    console.log("Testing basic functionality...");
-    console.log("Buffer length:", buffer.length);
-    console.log("Buffer type:", typeof buffer);
-    console.log("Buffer constructor:", buffer.constructor.name);
-    
-    // For now, just return a test response to see if the function works
-    return res.status(200).json({
-      original: "Test response - function is working",
-      cleaned: "Test response - function is working", 
-      audio: null,
-      bufferLength: buffer.length,
-      note: "This is a test to see if the Vercel function works at all"
-    });
+    // Call CleanSong API using Node.js compatible approach
+    let apiResponse;
+    try {
+      console.log("Calling CleanSong API with Node.js compatible approach...");
+      console.log("Buffer length:", buffer.length);
+      
+      // Convert buffer to base64 for transmission
+      const base64Audio = buffer.toString('base64');
+      console.log("Base64 audio length:", base64Audio.length);
+      
+      // Use the Gradio API format with base64 data
+      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/process_song", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          data: [base64Audio]
+        })
+      });
+      
+      console.log("CleanSong API response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("CleanSong API error:", errorText.substring(0, 500));
+        throw new Error(`CleanSong API error (${response.status}): ${errorText.substring(0, 200)}`);
+      }
+      
+      const result = await response.json();
+      console.log("CleanSong API response:", result);
+      
+      // The response should have a 'data' property containing the array
+      apiResponse = result.data;
+      
+    } catch (e) {
+      console.log("Error calling CleanSong API:", e.message, e.stack);
+      
+      // Fallback: Return mock response for testing
+      console.log("Using fallback mock response...");
+      console.log("CleanSong API failed. Error details:", e.message);
+      
+      return res.status(200).json({
+        original: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+        cleaned: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+        audio: null,
+        error: e.message,
+        note: "Audio file was successfully compressed and processed, but the CleanSong API is not responding correctly. Check Vercel function logs for detailed error information."
+      });
+    }
 
     // Parse and return the outputs (as per Hugging Face docs)
     try {
