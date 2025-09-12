@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
+import { Client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -51,44 +52,39 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong API using Node.js compatible approach
+    // Call CleanSong using proper Gradio client
     let apiResponse;
     try {
-      console.log("Calling CleanSong API with Node.js compatible approach...");
+      console.log("Connecting to CleanSong using Gradio client...");
       console.log("Buffer length:", buffer.length);
       
-      // Convert buffer to base64 for transmission
-      const base64Audio = buffer.toString('base64');
-      console.log("Base64 audio length:", base64Audio.length);
+      // Connect to the CleanSong space using Gradio client
+      const client = await Client.connect("CleanSong/Lyric-Cleaner");
+      console.log("Connected to CleanSong space successfully");
       
-      // Use the Gradio API format with base64 data
-      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/process_song", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          data: [base64Audio]
-        })
+      // Create a File-like object from buffer (Node.js compatible)
+      const audioFile = {
+        name: 'audio.wav',
+        type: 'audio/wav',
+        size: buffer.length,
+        stream: () => Readable.from(buffer),
+        arrayBuffer: () => Promise.resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
+      };
+      
+      console.log("Created audio file object, size:", audioFile.size);
+      
+      // Use the exact API call format from Hugging Face docs
+      console.log("Calling /process_song with audio_path parameter...");
+      const result = await client.predict("/process_song", { 
+        audio_path: audioFile
       });
       
-      console.log("CleanSong API response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("CleanSong API error:", errorText.substring(0, 500));
-        throw new Error(`CleanSong API error (${response.status}): ${errorText.substring(0, 200)}`);
-      }
-      
-      const result = await response.json();
       console.log("CleanSong API response:", result);
-      
-      // The response should have a 'data' property containing the array
+      console.log("CleanSong API response data:", result.data);
       apiResponse = result.data;
       
     } catch (e) {
-      console.log("Error calling CleanSong API:", e.message, e.stack);
+      console.log("Error calling CleanSong with Gradio client:", e.message, e.stack);
       
       // Fallback: Return mock response for testing
       console.log("Using fallback mock response...");
