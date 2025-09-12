@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
+import { Client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -51,101 +52,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong using correct Gradio space API format
+    // Call CleanSong using the actual Gradio client
     let apiResponse;
     try {
-      console.log("Calling CleanSong/Lyric-Cleaner Gradio space with correct format...");
+      console.log("Connecting to CleanSong using Gradio client...");
       
-      // Convert audio to base64 data URL
-      const audioDataUrl = `data:audio/wav;base64,${base64Audio}`;
-      console.log("Created audio data URL, length:", audioDataUrl.length);
+      // Connect to the CleanSong space using Gradio client
+      const client = await Client.connect("CleanSong/Lyric-Cleaner");
+      console.log("Connected to CleanSong space successfully");
       
-      // Use correct CleanSong API format
-      console.log("Calling CleanSong with correct API format...");
+      // Create audio blob from buffer
+      const audioBlob = new Blob([buffer], { type: 'audio/wav' });
+      console.log("Created audio blob, size:", audioBlob.size);
       
-      // Try different possible API endpoints for the CleanSong space
-      const possibleEndpoints = [
-        "https://CleanSong-Lyric-Cleaner.hf.space/run/process_song",
-        "https://CleanSong-Lyric-Cleaner.hf.space/api/process_song/",
-        "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/api/process_song/"
-      ];
+      // Use the exact API call format from Hugging Face docs
+      console.log("Calling /process_song with audio_path parameter...");
+      const result = await client.predict("/process_song", { 
+        audio_path: audioBlob
+      });
       
-      let response;
-      let workingEndpoint = null;
-      
-      for (const endpoint of possibleEndpoints) {
-        try {
-          console.log(`Trying endpoint: ${endpoint}`);
-          
-          // Create FormData for file upload
-          const formData = new FormData();
-          const audioBlob = new Blob([buffer], { type: 'audio/wav' });
-          formData.append('audio_path', audioBlob, 'audio.wav');
-          
-          console.log("Created audio blob, size:", audioBlob.size);
-          
-          response = await fetch(endpoint, {
-            method: "POST",
-            body: formData
-          });
-          
-          console.log(`Response status for ${endpoint}:`, response.status);
-          
-          if (response.ok) {
-            workingEndpoint = endpoint;
-            console.log(`Success with endpoint: ${endpoint}`);
-            break;
-          } else {
-            const errorText = await response.text();
-            console.log(`Error with ${endpoint}:`, errorText.substring(0, 200));
-          }
-        } catch (err) {
-          console.log(`Exception with ${endpoint}:`, err.message);
-        }
-      }
-      
-      if (!workingEndpoint) {
-        // Try JSON format as fallback
-        console.log("Trying JSON format as fallback...");
-        try {
-          const jsonResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/process_song/", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              data: [audioDataUrl]
-            })
-          });
-          
-          if (jsonResponse.ok) {
-            console.log("JSON format worked!");
-            response = jsonResponse;
-            workingEndpoint = "JSON format";
-          } else {
-            throw new Error("JSON format also failed");
-          }
-        } catch (jsonError) {
-          console.log("JSON format failed:", jsonError.message);
-          throw new Error("All CleanSong endpoints and formats failed");
-        }
-      }
-      
-      console.log("CleanSong API response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("CleanSong API error:", errorText.substring(0, 500));
-        throw new Error(`CleanSong API error (${response.status}): ${errorText.substring(0, 200)}`);
-      }
-      
-      const result = await response.json();
       console.log("CleanSong API response:", result);
-      apiResponse = result;
+      console.log("CleanSong API response data:", result.data);
+      apiResponse = result.data;
       
     } catch (e) {
-      console.log("Error calling CleanSong API:", e.message, e.stack);
+      console.log("Error calling CleanSong with Gradio client:", e.message, e.stack);
       
       // Fallback: Return mock response for testing
       console.log("Using fallback mock response...");
@@ -160,42 +91,38 @@ export default async function handler(req, res) {
       });
     }
 
-    // Parse and return the outputs
+    // Parse and return the outputs (as per Hugging Face docs)
     try {
-      console.log("Parsing Gradio API response:", apiResponse);
+      console.log("Parsing CleanSong API response:", apiResponse);
       
-      // Handle Gradio response format
-      let original, cleaned, audio;
+      // According to Hugging Face docs, returns list of 3 elements:
+      // [0] string - Original Lyrics
+      // [1] string - Cleaned Lyrics  
+      // [2] - Cleaned Song Audio
       
-      if (apiResponse.data && Array.isArray(apiResponse.data)) {
-        // Gradio API format - data array
-        original = apiResponse.data[0];
-        cleaned = apiResponse.data[1];
-        audio = apiResponse.data[2];
-      } else if (apiResponse.original && apiResponse.cleaned) {
-        // Direct format
-        original = apiResponse.original;
-        cleaned = apiResponse.cleaned;
-        audio = apiResponse.audio;
-      } else if (Array.isArray(apiResponse) && apiResponse.length >= 2) {
-        // Array format
-        original = apiResponse[0];
-        cleaned = apiResponse[1];
-        audio = apiResponse[2];
+      if (apiResponse && Array.isArray(apiResponse) && apiResponse.length >= 2) {
+        const original = apiResponse[0];
+        const cleaned = apiResponse[1];
+        const audio = apiResponse[2];
+        
+        console.log("Successfully parsed CleanSong response:");
+        console.log("- Original lyrics length:", original ? original.length : 0);
+        console.log("- Cleaned lyrics length:", cleaned ? cleaned.length : 0);
+        console.log("- Audio present:", !!audio);
+        
+        return res.status(200).json({
+          original: original || "No original lyrics found",
+          cleaned: cleaned || "No cleaned lyrics found", 
+          audio: audio || null
+        });
       } else {
-        console.log("Unknown Gradio response format:", apiResponse);
+        console.log("Unexpected CleanSong response format:", apiResponse);
         return res.status(500).json({ 
-          error: `Unknown response format from Gradio API: ${JSON.stringify(apiResponse).substring(0, 200)}...` 
+          error: `Unexpected response format from CleanSong API: ${JSON.stringify(apiResponse).substring(0, 200)}...` 
         });
       }
-      
-      return res.status(200).json({
-        original: original || "No original lyrics found",
-        cleaned: cleaned || "No cleaned lyrics found", 
-        audio: audio || null
-      });
     } catch (err) {
-      console.error("General error:", err.stack || err);
+      console.error("Error parsing CleanSong response:", err.stack || err);
       return res.status(500).json({ error: err.message || "Internal Server Error" });
     }
   } catch (err) {
