@@ -63,18 +63,73 @@ export default async function handler(req, res) {
       // Use correct CleanSong API format
       console.log("Calling CleanSong with correct API format...");
       
-      // Create FormData for file upload (not JSON)
-      const formData = new FormData();
-      const audioBlob = new Blob([buffer], { type: 'audio/wav' });
-      formData.append('audio_path', audioBlob, 'audio.wav');
+      // Try different possible API endpoints for the CleanSong space
+      const possibleEndpoints = [
+        "https://CleanSong-Lyric-Cleaner.hf.space/run/predict",
+        "https://CleanSong-Lyric-Cleaner.hf.space/api/predict/",
+        "https://huggingface.co/spaces/CleanSong/Lyric-Cleaner/api/predict/"
+      ];
       
-      console.log("Created audio blob, size:", audioBlob.size);
+      let response;
+      let workingEndpoint = null;
       
-      // Call the correct CleanSong endpoint
-      const response = await fetch("https://cleansong-lyric-cleaner.hf.space/run/predict", {
-        method: "POST",
-        body: formData
-      });
+      for (const endpoint of possibleEndpoints) {
+        try {
+          console.log(`Trying endpoint: ${endpoint}`);
+          
+          // Create FormData for file upload
+          const formData = new FormData();
+          const audioBlob = new Blob([buffer], { type: 'audio/wav' });
+          formData.append('audio_path', audioBlob, 'audio.wav');
+          
+          console.log("Created audio blob, size:", audioBlob.size);
+          
+          response = await fetch(endpoint, {
+            method: "POST",
+            body: formData
+          });
+          
+          console.log(`Response status for ${endpoint}:`, response.status);
+          
+          if (response.ok) {
+            workingEndpoint = endpoint;
+            console.log(`Success with endpoint: ${endpoint}`);
+            break;
+          } else {
+            const errorText = await response.text();
+            console.log(`Error with ${endpoint}:`, errorText.substring(0, 200));
+          }
+        } catch (err) {
+          console.log(`Exception with ${endpoint}:`, err.message);
+        }
+      }
+      
+      if (!workingEndpoint) {
+        // Try JSON format as fallback
+        console.log("Trying JSON format as fallback...");
+        try {
+          const jsonResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              data: [audioDataUrl]
+            })
+          });
+          
+          if (jsonResponse.ok) {
+            console.log("JSON format worked!");
+            response = jsonResponse;
+            workingEndpoint = "JSON format";
+          } else {
+            throw new Error("JSON format also failed");
+          }
+        } catch (jsonError) {
+          console.log("JSON format failed:", jsonError.message);
+          throw new Error("All CleanSong endpoints and formats failed");
+        }
+      }
       
       console.log("CleanSong API response status:", response.status);
       console.log("Response headers:", Object.fromEntries(response.headers.entries()));
