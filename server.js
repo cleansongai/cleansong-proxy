@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { client } from "@gradio/client";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,83 +63,101 @@ app.post('/api/process', async (req, res) => {
       return res.status(400).json({ error: "Invalid file encoding" });
     }
 
-    // Call CleanSong using correct Gradio space API format
+    // Call CleanSong using Gradio client (non-serverless)
     let apiResponse;
     try {
-      console.log("Calling CleanSong/Lyric-Cleaner Gradio space with correct format...");
+      console.log("=== GRADIO CLIENT DEBUGGING ===");
+      console.log("Using Gradio client with exact code snippet format...");
+      console.log("HF_TOKEN present:", !!process.env.HF_TOKEN);
+      console.log("HF_TOKEN length:", process.env.HF_TOKEN ? process.env.HF_TOKEN.length : 0);
+      console.log("Buffer length:", buffer.length);
+      console.log("Base64 audio length:", base64Audio.length);
       
-      // Convert audio to base64 data URL
-      const audioDataUrl = `data:audio/wav;base64,${base64Audio}`;
-      console.log("Created audio data URL, length:", audioDataUrl.length);
+      // Try different space name formats with authentication
+      let app;
+      const spaceNames = [
+        "CleanSong/Lyric-Cleaner",
+        "CleanSong-Lyric-Cleaner"
+      ];
       
-      // Call the Gradio space API with correct JSON format
-      const response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/api/predict/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          data: [audioDataUrl]
-        })
+      console.log("=== ATTEMPTING SPACE CONNECTIONS ===");
+      for (const spaceName of spaceNames) {
+        try {
+          console.log(`\n--- Trying space name: ${spaceName} ---`);
+          console.log("Calling client() with:", { spaceName, hasToken: !!process.env.HF_TOKEN });
+          
+          app = await client(spaceName, {
+            hf_token: process.env.HF_TOKEN
+          });
+          
+          console.log(`✅ SUCCESS: Connected to ${spaceName} successfully!`);
+          console.log("App object:", typeof app);
+          console.log("App methods:", Object.getOwnPropertyNames(app));
+          break;
+        } catch (e) {
+          console.log(`❌ FAILED: ${spaceName}`);
+          console.log("Error type:", e.constructor.name);
+          console.log("Error message:", e.message);
+          console.log("Error stack:", e.stack);
+          console.log("---");
+        }
+      }
+      
+      if (!app) {
+        console.log("❌ ALL CONNECTION ATTEMPTS FAILED");
+        throw new Error("Could not connect to CleanSong space with any name format");
+      }
+      
+      // Create the exact file object format from the code snippet
+      console.log("\n=== CREATING AUDIO FILE OBJECT ===");
+      const fileId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const filePath = `/tmp/gradio/${fileId}/audio.wav`;
+      
+      const audioFile = {
+        path: filePath,
+        url: `https://cleansong-lyric-cleaner.hf.space/gradio_api/file=${filePath}`,
+        orig_name: 'audio.wav',
+        size: buffer.length,
+        mime_type: 'audio/wav',
+        meta: {"_type": "gradio.FileData"}
+      };
+      
+      console.log("File ID:", fileId);
+      console.log("File path:", filePath);
+      console.log("Audio file object:", JSON.stringify(audioFile, null, 2));
+      
+      // Use the exact predict call from the code snippet
+      console.log("\n=== CALLING PREDICT ===");
+      console.log("Calling app.predict with:");
+      console.log("- Endpoint: /process_song");
+      console.log("- Audio file size:", audioFile.size);
+      console.log("- Audio file type:", audioFile.mime_type);
+      
+      const result = await app.predict("/process_song", {
+        audio_path: audioFile
       });
       
-      console.log("Gradio space response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+      console.log("✅ PREDICT SUCCESS!");
+      console.log("Result type:", typeof result);
+      console.log("Result keys:", Object.keys(result));
+      console.log("Result.data:", result.data);
+      console.log("Result.data type:", typeof result.data);
+      console.log("Result.data length:", Array.isArray(result.data) ? result.data.length : 'not array');
       
-      // Check if response is HTML (error page)
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const htmlResponse = await response.text();
-        console.log("HTML response received (first 1000 chars):", htmlResponse.substring(0, 1000));
-        throw new Error(`Gradio space returned HTML instead of JSON. Status: ${response.status}`);
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("Gradio space error:", errorText.substring(0, 500));
-        throw new Error(`Gradio space error (${response.status}): ${errorText.substring(0, 200)}`);
-      }
-      
-      const result = await response.json();
-      console.log("Gradio space response:", result);
-      apiResponse = result;
+      apiResponse = result.data;
       
     } catch (e) {
-      console.log("Error calling CleanSong Gradio space:", e.message, e.stack);
+      console.log("Error with Gradio client:", e.message, e.stack);
       
-      // Try alternative approach with different endpoint
-      try {
-        console.log("Trying alternative Gradio space endpoint...");
-        const altResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/run/predict", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            data: [`data:audio/wav;base64,${base64Audio}`]
-          })
-        });
-        
-        if (altResponse.ok) {
-          const altResult = await altResponse.json();
-          console.log("Alternative endpoint worked:", altResult);
-          apiResponse = altResult;
-        } else {
-          throw new Error("Alternative endpoint also failed");
-        }
-      } catch (altError) {
-        console.log("Alternative approach also failed:", altError.message);
-        
-        // Final fallback: Return mock response for testing
-        console.log("Using fallback mock response...");
-        return res.status(200).json({
-          original: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
-          cleaned: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
-          audio: null,
-          error: e.message,
-          note: "Audio file was successfully compressed and processed, but the CleanSong API is not responding correctly."
-        });
-      }
+      // Fallback: Return mock response for testing
+      console.log("Using fallback mock response...");
+      return res.status(200).json({
+        original: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+        cleaned: "The CleanSong API is not available. This is a fallback response showing that the audio compression is working correctly.",
+        audio: null,
+        error: e.message,
+        note: "Audio file was successfully compressed and processed, but the CleanSong API is not responding correctly."
+      });
     }
 
     // Parse and return the outputs
