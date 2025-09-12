@@ -73,56 +73,61 @@ export default async function handler(req, res) {
       const base64Audio = buffer.toString('base64');
       console.log("Created base64 audio, length:", base64Audio.length);
       
-      // Try different Gradio API endpoints and body formats
-      let response;
-      const endpoints = [
-        "/api/predict/",
-        "/run/predict", 
-        "/api/predict",
-        "/predict"
-      ];
+      // First, let's check what endpoints are available
+      console.log("Checking available endpoints...");
       
-      const bodyFormats = [
-        { data: [base64Audio] },
-        { inputs: [base64Audio] },
-        [base64Audio],
-        { audio: base64Audio }
-      ];
-      
-      let success = false;
-      
-      for (const endpoint of endpoints) {
-        for (const bodyFormat of bodyFormats) {
-          try {
-            console.log(`Trying endpoint: ${endpoint} with body:`, Object.keys(bodyFormat).length > 0 ? Object.keys(bodyFormat) : 'array');
-            response = await fetch(`https://CleanSong-Lyric-Cleaner.hf.space${endpoint}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${hfToken}`
-              },
-              body: JSON.stringify(bodyFormat)
-            });
-            
-            console.log(`Response status:`, response.status);
-            
-            if (response.ok) {
-              console.log(`Success with endpoint: ${endpoint} and body format:`, Object.keys(bodyFormat).length > 0 ? Object.keys(bodyFormat) : 'array');
-              success = true;
-              break;
-            } else {
-              const errorText = await response.text();
-              console.log(`Failed:`, errorText.substring(0, 100));
-            }
-          } catch (e) {
-            console.log(`Error:`, e.message);
+      // Try to get the space info first
+      let spaceInfo;
+      try {
+        const infoResponse = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/", {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${hfToken}`
+          }
+        });
+        console.log("Space info response status:", infoResponse.status);
+        
+        if (infoResponse.ok) {
+          const infoText = await infoResponse.text();
+          console.log("Space info (first 500 chars):", infoText.substring(0, 500));
+          
+          // Look for API endpoints in the HTML
+          const apiMatches = infoText.match(/\/api\/[^"'\s]+/g);
+          if (apiMatches) {
+            console.log("Found API endpoints in HTML:", apiMatches);
           }
         }
-        if (success) break;
+      } catch (e) {
+        console.log("Error getting space info:", e.message);
       }
       
-      if (!success) {
-        throw new Error("All API endpoints and body formats failed");
+      // Try the specific endpoint from the original documentation
+      console.log("Trying the specific /process_song endpoint...");
+      let response;
+      try {
+        response = await fetch("https://CleanSong-Lyric-Cleaner.hf.space/process_song", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${hfToken}`
+          },
+          body: JSON.stringify({
+            data: [base64Audio]
+          })
+        });
+        
+        console.log("Process_song response status:", response.status);
+        
+        if (response.ok) {
+          console.log("Success with /process_song endpoint!");
+        } else {
+          const errorText = await response.text();
+          console.log("Process_song failed:", errorText.substring(0, 200));
+          throw new Error(`Process_song endpoint failed: ${errorText}`);
+        }
+      } catch (e) {
+        console.log("Process_song error:", e.message);
+        throw new Error(`All API attempts failed. Last error: ${e.message}`);
       }
       
       console.log("CleanSong API response status:", response.status);
