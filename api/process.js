@@ -97,50 +97,62 @@ export default async function handler(req, res) {
         console.log("Error getting API info:", e.message);
       }
       
-      // Use the exact API format from HAR file analysis
-      console.log("Using the exact API format from HAR file...");
+      // Try different Gradio API endpoints based on common patterns
+      console.log("Trying different Gradio API endpoints...");
       
-      // Generate a unique file path like in the HAR file
-      const fileId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      const filePath = `/tmp/gradio/${fileId}/audio.wav`;
+      const endpoints = [
+        "/api/predict/",
+        "/run/predict",
+        "/api/predict",
+        "/predict",
+        "/gradio_api/predict/",
+        "/gradio_api/run/predict"
+      ];
       
-      // Create the exact file object format from HAR file
-      const audioFile = {
-        path: filePath,
-        url: `https://cleansong-lyric-cleaner.hf.space/gradio_api/file=${filePath}`,
-        orig_name: 'audio.wav',
-        size: buffer.length,
-        mime_type: 'audio/wav',
-        meta: {"_type": "gradio.FileData"}
-      };
+      let response;
+      let success = false;
       
-      console.log("Created audio file object:", {
-        path: audioFile.path,
-        size: audioFile.size,
-        mime_type: audioFile.mime_type
-      });
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`Trying endpoint: ${endpoint}`);
+          
+          // Create a simple file object for each attempt
+          const audioFile = {
+            path: `data:audio/wav;base64,${base64Audio}`,
+            url: `data:audio/wav;base64,${base64Audio}`,
+            orig_name: 'audio.wav',
+            size: buffer.length,
+            mime_type: 'audio/wav',
+            meta: {"_type": "gradio.FileData"}
+          };
+          
+          response = await fetch(`https://cleansong-lyric-cleaner.hf.space${endpoint}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              data: [audioFile]
+            })
+          });
+          
+          console.log(`Endpoint ${endpoint} response status:`, response.status);
+          
+          if (response.ok) {
+            console.log(`Success with endpoint: ${endpoint}`);
+            success = true;
+            break;
+          } else {
+            const errorText = await response.text();
+            console.log(`Endpoint ${endpoint} failed:`, errorText.substring(0, 100));
+          }
+        } catch (e) {
+          console.log(`Endpoint ${endpoint} error:`, e.message);
+        }
+      }
       
-      // Use the exact API call from HAR file
-      const response = await fetch("https://cleansong-lyric-cleaner.hf.space/gradio_api/queue/join?", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          data: [audioFile],
-          event_data: null,
-          fn_index: 0,
-          trigger_id: Math.floor(Math.random() * 1000000),
-          session_hash: Math.random().toString(36).substring(2, 15)
-        })
-      });
-      
-      console.log("Gradio API response status:", response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("Gradio API failed:", errorText.substring(0, 200));
-        throw new Error(`Gradio API failed: ${errorText}`);
+      if (!success) {
+        throw new Error("All Gradio API endpoints failed. The space may not have API access enabled or may use a different API structure.");
       }
       
       console.log("CleanSong API response status:", response.status);
