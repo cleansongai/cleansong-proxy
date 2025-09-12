@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import { Client } from "@gradio/client";
+import { client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
       
       try {
         // Connect to the CleanSong space
-        const app = await Client.connect("CleanSong/Lyric-Cleaner");
+        const app = await client("CleanSong/Lyric-Cleaner");
         console.log("Connected to CleanSong space successfully");
         
         // Create the exact file object format from the code snippet
