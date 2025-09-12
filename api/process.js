@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import { Readable } from "stream";
-import { client, handle_file } from "@gradio/client";
+import { client } from "@gradio/client";
 
 export default async function handler(req, res) {
   console.log("Handler invoked. Method:", req.method);
@@ -62,9 +62,15 @@ export default async function handler(req, res) {
       const app = await client("CleanSong/Lyric-Cleaner");
       console.log("Connected to CleanSong space successfully");
       
-      // Use handle_file to properly format the audio data
-      const audioFile = handle_file(buffer, "audio/wav");
-      console.log("Created audio file using handle_file, size:", buffer.length);
+      // Create a file-like object for the audio data
+      const audioFile = {
+        name: 'audio.wav',
+        type: 'audio/wav',
+        size: buffer.length,
+        stream: () => Readable.from(buffer),
+        arrayBuffer: () => Promise.resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
+      };
+      console.log("Created audio file object, size:", buffer.length);
       
       // Use the exact API call format from Hugging Face docs
       console.log("Calling /process_song with audio file...");
