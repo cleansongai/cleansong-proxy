@@ -38,6 +38,30 @@ export default async function handler(req, res) {
     const base64Audio = audioBuffer.toString('base64');
     console.log('Created base64 audio, length:', base64Audio.length);
 
+    console.log('=== CHECKING SPACE STATUS ===');
+    
+    // First, check if the space is running by hitting the main page
+    const spaceUrl = 'https://cleansong-lyric-cleaner.hf.space/';
+    console.log('--- Checking space status:', spaceUrl, '---');
+    
+    try {
+      const statusResponse = await fetch(spaceUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${hfToken}`,
+        }
+      });
+      console.log('Space status response:', statusResponse.status);
+      console.log('Space headers:', Object.fromEntries(statusResponse.headers.entries()));
+      
+      if (statusResponse.status === 200) {
+        const spaceContent = await statusResponse.text();
+        console.log('Space content preview:', spaceContent.substring(0, 500));
+      }
+    } catch (statusError) {
+      console.log('Error checking space status:', statusError.message);
+    }
+
     console.log('=== TRYING DIFFERENT ENDPOINTS ===');
     
     // Try the main CleanSong endpoint
@@ -77,7 +101,11 @@ export default async function handler(req, res) {
       const alternativeEndpoints = [
         'https://cleansong-lyric-cleaner.hf.space/run/predict',
         'https://cleansong-lyric-cleaner.hf.space/api/predict/',
-        'https://cleansong-lyric-cleaner.hf.space/api/v1/predict'
+        'https://cleansong-lyric-cleaner.hf.space/gradio_api/predict/',
+        'https://cleansong-lyric-cleaner.hf.space/api/v1/predict',
+        'https://cleansong-lyric-cleaner.hf.space/predict',
+        'https://cleansong-lyric-cleaner.hf.space/api/',
+        'https://cleansong-lyric-cleaner.hf.space/process_song'
       ];
 
       for (const endpoint of alternativeEndpoints) {
